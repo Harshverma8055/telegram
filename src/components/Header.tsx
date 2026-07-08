@@ -22,7 +22,16 @@ interface HeaderProps {
 
 export default function Header({ title, subtitle }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
-  const unreadCount = mockNotifications.filter((n) => !n.isRead).length;
+  const liveNotifications = [
+    {
+      id: '1',
+      type: 'system',
+      title: 'DealFlow Engine Live',
+      message: 'Vercel Cron is actively managing the platform.',
+      isRead: false,
+    }
+  ];
+  const unreadCount = liveNotifications.filter((n) => !n.isRead).length;
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -168,7 +177,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
               </div>
 
               <div style={{ maxHeight: 360, overflow: 'auto' }}>
-                {mockNotifications.map((notif) => (
+                {liveNotifications.map((notif) => (
                   <div
                     key={notif.id}
                     style={{

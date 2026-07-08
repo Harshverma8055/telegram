@@ -24,7 +24,7 @@ export default function TelegramView() {
           <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Telegram Channels</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Manage auto-publishing channels and groups</p>
         </div>
-        <button className="btn-primary">
+        <button className="btn-primary" onClick={() => alert('To add more target channels, please upgrade your database to the Multi-Channel tier, or update the TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL in your .env file.')}>
           <Plus size={16} /> Add Channel
         </button>
       </div>

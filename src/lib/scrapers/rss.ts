@@ -7,6 +7,7 @@ export interface RSSDeal {
   content: string;
   pubDate: string;
   source: string;
+  imageUrl?: string;
 }
 
 // Secret unblockable method: Scrape competitors' public Telegram channels!
@@ -37,12 +38,24 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
         const diffHours = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60);
         
         if (diffHours <= 24) {
+          // Scrape image preview
+          let imageUrl = '';
+          const photoEl = $(el).find('.tgme_widget_message_photo_wrap');
+          if (photoEl.length > 0) {
+            const style = photoEl.attr('style') || '';
+            const match = style.match(/background-image:\s*url\(['"]?(.*?)['"]?\)/i);
+            if (match && match[1]) {
+              imageUrl = match[1];
+            }
+          }
+
           deals.push({
             title: text.substring(0, 100).replace(/\n/g, ' ') + '...',
             link: amzLink,
             content: text,
             pubDate: time,
-            source: `Telegram: @${channelName}`
+            source: `Telegram: @${channelName}`,
+            imageUrl: imageUrl || undefined
           });
         }
       }

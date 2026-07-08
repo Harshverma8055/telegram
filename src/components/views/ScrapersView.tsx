@@ -106,10 +106,22 @@ export default function ScrapersView() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Scraper Status & Control</h2>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn-secondary">
+          <button className="btn-secondary" onClick={() => alert('All scrapers are managed by Vercel Cron in the cloud.')}>
             <Square size={16} /> Stop All
           </button>
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={async (e) => {
+            const btn = e.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Running...';
+            try {
+              await fetch('/api/cron');
+              alert('Successfully triggered all scrapers in the background!');
+            } catch (err) {
+              alert('Failed to run scrapers.');
+            } finally {
+              btn.innerHTML = originalText;
+            }
+          }}>
             <Play size={16} /> Run All Scrapers
           </button>
         </div>

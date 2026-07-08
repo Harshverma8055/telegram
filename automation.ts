@@ -64,6 +64,7 @@ async function runAutomationCycle() {
             title: item.title,
             url: `https://www.amazon.in/dp/${asin}`,
             currentPrice: 0, // Price is unknown via RSS, but they click the link to see it!
+            imageUrl: item.imageUrl,
           }
         });
 

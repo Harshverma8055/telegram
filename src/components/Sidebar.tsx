@@ -51,8 +51,8 @@ const navGroups: { title: string; items: NavItem[] }[] = [
   {
     title: 'DEAL ENGINE',
     items: [
-      { id: 'deals', label: 'All Deals', icon: <Tag size={18} />, badge: '12.4K' },
-      { id: 'flash-sales', label: 'Flash Sales', icon: <Zap size={18} />, badge: '23' },
+      { id: 'deals', label: 'All Deals', icon: <Tag size={18} /> },
+      { id: 'flash-sales', label: 'Flash Sales', icon: <Zap size={18} /> },
       { id: 'price-drops', label: 'Price Drops', icon: <TrendingUp size={18} /> },
       { id: 'coupons', label: 'Coupons', icon: <Link2 size={18} /> },
       { id: 'ai-scoring', label: 'AI Scoring', icon: <Sparkles size={18} /> },
@@ -61,14 +61,14 @@ const navGroups: { title: string; items: NavItem[] }[] = [
   {
     title: 'SCRAPERS',
     items: [
-      { id: 'scrapers', label: 'Scraper Status', icon: <Globe size={18} />, badge: '8/24' },
+      { id: 'scrapers', label: 'Scraper Status', icon: <Globe size={18} />, badge: '1 active' },
       { id: 'platforms', label: 'Platforms', icon: <Database size={18} /> },
     ],
   },
   {
     title: 'DISTRIBUTION',
     items: [
-      { id: 'telegram', label: 'Telegram', icon: <Send size={18} />, badge: '5 channels' },
+      { id: 'telegram', label: 'Telegram', icon: <Send size={18} />, badge: '1 channel' },
       { id: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle size={18} /> },
       { id: 'content', label: 'Content AI', icon: <Bot size={18} /> },
       { id: 'images', label: 'Image Studio', icon: <ImageIcon size={18} /> },

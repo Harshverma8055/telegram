@@ -81,6 +81,7 @@ export async function GET(request: Request) {
             title: item.title,
             url: `https://www.amazon.in/dp/${asin}`,
             currentPrice: extractedPrice, 
+            imageUrl: item.imageUrl,
           }
         });
 
