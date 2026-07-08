@@ -1,63 +1,351 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState } from 'react';
+import {
+  TrendingUp,
+  Users,
+  CreditCard,
+  DollarSign,
+  ArrowUpRight,
+  ArrowDownRight,
+  ShoppingCart,
+  Activity,
+  Package,
+} from 'lucide-react';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import Sidebar from '@/components/Sidebar';
+import Header from '@/components/Header';
+import DealsView from '@/components/views/DealsView';
+import ScrapersView from '@/components/views/ScrapersView';
+import TelegramView from '@/components/views/TelegramView';
+import {
+  mockDashboardStats,
+  mockRevenueTimeline,
+  mockPlatformBreakdown,
+  mockDeals,
+  formatCurrency,
+  formatNumber,
+  getDealScoreClass,
+} from '@/lib/mock-data';
+
+// Internal Dashboard View component to keep code clean
+function DashboardView() {
+  const [stats, setStats] = React.useState({
+    totalDeals: 0,
+    dealsChange: 0,
+    conversionRate: 0,
+  });
+
+  React.useEffect(() => {
+    fetch('/api/deals')
+      .then(res => res.json())
+      .then(data => {
+        if (data.deals) {
+          setStats({
+            totalDeals: data.deals.length,
+            dealsChange: 100, // 100% since start
+            conversionRate: 0, // Pending Amazon API
+          });
+        }
+      });
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+      {/* Top Metric Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: '24px',
+      }}>
+        {/* Revenue - Awaiting Amazon API */}
+        <div className="glass-card metric-card purple" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '12px',
+              background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <DollarSign size={20} color="var(--accent-primary-light)" />
+            </div>
+            <div className="status-badge warning">
+              Awaiting Amazon API
+            </div>
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 500 }}>Total Revenue</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            ₹0.00
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Clicks - Awaiting Amazon API */}
+        <div className="glass-card metric-card cyan" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '12px',
+              background: 'rgba(6,182,212,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Activity size={20} color="#22d3ee" />
+            </div>
+            <div className="status-badge warning">
+              Awaiting Amazon API
+            </div>
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 500 }}>Total Clicks</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            0
+          </div>
+        </div>
+
+        {/* Live Deals Published */}
+        <div className="glass-card metric-card emerald" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '12px',
+              background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Package size={20} color="#34d399" />
+            </div>
+            <div className="status-badge active">
+              <ArrowUpRight size={14} /> LIVE 
+            </div>
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 500 }}>Deals Scraped & Published</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            {formatNumber(stats.totalDeals)}
+          </div>
+        </div>
+
+        {/* Conversion Rate */}
+        <div className="glass-card metric-card amber" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '12px',
+              background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <ShoppingCart size={20} color="#fbbf24" />
+            </div>
+            <div className="status-badge warning">
+              Awaiting Amazon API
+            </div>
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 500 }}>Avg. Conversion Rate</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            0%
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Section */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '2fr 1fr',
+        gap: '24px',
+      }}>
+        {/* Revenue Chart */}
+        <div className="chart-container">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Revenue Overview</h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Last 7 days performance</p>
+            </div>
+            <div className="tab-list">
+              <button className="tab-item active">7D</button>
+              <button className="tab-item">30D</button>
+              <button className="tab-item">90D</button>
+            </div>
+          </div>
+          <div style={{ height: '300px', width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={mockRevenueTimeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} dy={10} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} tickFormatter={(value) => `₹${value/1000}k`} />
+                <RechartsTooltip 
+                  contentStyle={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)', borderRadius: '12px' }}
+                  itemStyle={{ color: 'var(--text-primary)' }}
+                  labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
+                  formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+                />
+                <Area type="monotone" dataKey="value" stroke="var(--accent-primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Platform Breakdown */}
+        <div className="chart-container">
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '24px' }}>Platform Performance</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {mockPlatformBreakdown.slice(0, 5).map((platform, idx) => {
+              const maxRevenue = Math.max(...mockPlatformBreakdown.map(p => p.revenue));
+              const percentage = (platform.revenue / maxRevenue) * 100;
+              
+              return (
+                <div key={idx}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                    <span style={{ fontWeight: 500, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{platform.platform.replace('_', ' ')}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{formatCurrency(platform.revenue)}</span>
+                  </div>
+                  <div className="progress-bar">
+                    <div 
+                      className="progress-bar-fill" 
+                      style={{ 
+                        width: `${percentage}%`,
+                        background: `var(--accent-primary)`,
+                        opacity: 1 - (idx * 0.15)
+                      }} 
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Top Deals Table */}
+      <div className="chart-container" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Top Performing Deals</h3>
+          <button className="btn-ghost" style={{ color: 'var(--accent-primary-light)' }}>View All Deals</button>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Product / Deal</th>
+                <th>Platform</th>
+                <th>Score</th>
+                <th>Price</th>
+                <th>Revenue</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mockDeals.slice(0, 5).map((deal) => (
+                <tr key={deal.id}>
+                  <td style={{ maxWidth: '300px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        width: '40px', height: '40px', borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}>
+                         <Package size={20} color="var(--text-muted)" />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {deal.title}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                          {deal.brand} • {deal.category}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>
+                    {deal.platform}
+                  </td>
+                  <td>
+                    <div className={`deal-score ${getDealScoreClass(deal.dealScore)}`} style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
+                      {deal.dealScore}
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>₹{deal.dealPrice.toLocaleString('en-IN')}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--accent-emerald)', marginTop: '2px' }}>{deal.discount}% OFF</div>
+                  </td>
+                  <td style={{ fontWeight: 500 }}>
+                    {formatCurrency(deal.revenue)}
+                  </td>
+                  <td>
+                    <div className={`status-badge ${deal.isPublished ? 'active' : 'warning'}`}>
+                      {deal.isPublished ? 'Published' : 'Pending'}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+export default function App() {
+  const [activeSection, setActiveSection] = useState('dashboard');
+
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'dashboard':
+        return <DashboardView />;
+      case 'deals':
+      case 'flash-sales':
+      case 'price-drops':
+        return <DealsView />;
+      case 'scrapers':
+        return <ScrapersView />;
+      case 'telegram':
+        return <TelegramView />;
+      default:
+        return (
+          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <h2 style={{ fontSize: '24px', color: 'var(--text-primary)', marginBottom: '12px' }}>Coming Soon</h2>
+            <p>The <strong>{activeSection.replace('-', ' ')}</strong> module is under active development for Phase 2.</p>
+          </div>
+        );
+    }
+  };
+
+  const getPageTitle = () => {
+    switch (activeSection) {
+      case 'dashboard': return 'Dashboard';
+      case 'deals': return 'Deal Engine';
+      case 'flash-sales': return 'Flash Sales';
+      case 'price-drops': return 'Price Drops';
+      case 'scrapers': return 'Scraper Engine';
+      case 'telegram': return 'Telegram Automation';
+      default: return activeSection.charAt(0).toUpperCase() + activeSection.slice(1).replace('-', ' ');
+    }
+  };
+
+  const getPageSubtitle = () => {
+    switch (activeSection) {
+      case 'dashboard': return "Welcome back, here's what's happening today.";
+      case 'deals': return "Review, score, and publish the latest deals.";
+      case 'scrapers': return "Monitor live bot performance across 24 platforms.";
+      case 'telegram': return "Manage multi-channel auto-publishing.";
+      default: return '';
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
+      
+      <main className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <Header 
+          title={getPageTitle()} 
+          subtitle={getPageSubtitle()}
+        />
+
+        <div style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
+          {renderContent()}
         </div>
       </main>
     </div>

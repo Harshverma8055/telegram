@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DealFlow AI 🚀
 
-## Getting Started
+An autonomous, serverless SaaS platform that hunts for high-discount affiliate deals across the internet and prepares them for 1-click distribution to your Telegram and WhatsApp communities.
 
-First, run the development server:
+## 🏗️ Architecture
 
+- **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Lucide React
+- **Backend:** Next.js Serverless API Routes
+- **Database:** PostgreSQL (Hosted on Supabase) + Prisma ORM
+- **Automation:** Vercel Cron Jobs (runs every hour)
+- **Monetization:** Amazon Associates Program (Native link generation)
+
+## 💸 Monetization Strategy (Zero-Cost Setup)
+
+This system is designed to generate passive income with zero running costs.
+1. **The Scraper:** The `src/app/api/cron/route.ts` file automatically pulls public RSS feeds (like Reddit Deal communities) every hour to find what humans are already identifying as hot deals.
+2. **The Link Injector:** It instantly extracts the Amazon ASIN and automatically attaches your Amazon Affiliate Tag (`AMAZON_AFFILIATE_TAG`).
+3. **Quality Control:** It saves the deal to your cloud database.
+4. **1-Click Publishing:** You open your dashboard, click "Approve", and the engine instantly pushes a beautiful, conversion-optimized message with inline buttons to your Telegram channel.
+
+## 🛠️ Local Development
+
+### 1. Install Dependencies
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment Variables
+Create a `.env` file in the root directory:
+```env
+DATABASE_URL="postgresql://postgres:[password]@db.your-supabase-url.supabase.co:5432/postgres"
+DIRECT_URL="postgresql://postgres:[password]@db.your-supabase-url.supabase.co:5432/postgres"
+TELEGRAM_BOT_TOKEN="your_telegram_bot_token"
+AMAZON_AFFILIATE_TAG="your_amazon_tag-21"
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Sync Database
+Push the Prisma schema to your Supabase project:
+```bash
+npx prisma db push
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Run the Dashboard
+```bash
+npm run dev
+```
+Open `http://localhost:3000` to view the admin dashboard.
 
-## Learn More
+## ☁️ Vercel Deployment
 
-To learn more about Next.js, take a look at the following resources:
+1. Push this code to a GitHub repository.
+2. Go to [Vercel](https://vercel.com) and import the repository.
+3. In the Vercel deployment settings, paste all the variables from your `.env` file.
+4. Deploy!
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+*Note: The `vercel.json` file is already configured. Vercel will automatically trigger your scraping engine every hour, 24/7, for free.*
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📱 Supported Platforms
+- [x] Telegram (Full Markdown + Inline Keyboard Buttons)
+- [ ] WhatsApp (Integration code available in `src/lib/whatsapp.ts`, requires dedicated secondary SIM to prevent personal account bans).

@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String?
+  role          String    @default("user") // admin, user
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Platform {
+  id            String    @id @default(uuid())
+  name          String
+  slug          String    @unique
+  isActive      Boolean   @default(true)
+  products      Product[]
+  deals         Deal[]
+  jobs          ScraperJob[]
+}
+
+model Product {
+  id            String    @id @default(uuid())
+  platformId    String
+  platform      Platform  @relation(fields: [platformId], references: [id])
+  externalId    String    // ID on the platform (e.g. Amazon ASIN)
+  title         String
+  brand         String?
+  category      String?
+  mrp           Float?
+  currentPrice  Float?
+  url           String
+  imageUrl      String?
+  rating        Float?
+  reviewCount   Int       @default(0)
+  lastScrapedAt DateTime  @default(now())
+  deals         Deal[]
+  history       PriceHistory[]
+
+  @@unique([platformId, externalId])
+}
+
+model PriceHistory {
+  id            String    @id @default(uuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price         Float
+  recordedAt    DateTime  @default(now())
+}
+
+model Deal {
+  id            String    @id @default(uuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  platformId    String
+  platform      Platform  @relation(fields: [platformId], references: [id])
+  dealType      String    // flash_sale, price_drop, coupon, etc
+  dealScore     Int       @default(0)
+  originalPrice Float?
+  dealPrice     Float
+  discountPct   Float?
+  couponCode    String?
+  bankOffer     String?
+  isGenuine     Boolean   @default(true)
+  isPublished   Boolean   @default(false)
+  affiliateUrl  String?
+  clicks        Int       @default(0)
+  conversions   Int       @default(0)
+  revenue       Float     @default(0)
+  expiresAt     DateTime?
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model ScraperJob {
+  id              String    @id @default(uuid())
+  platformId      String
+  platform        Platform  @relation(fields: [platformId], references: [id])
+  status          String    @default("running") // running, completed, failed
+  productsScanned Int       @default(0)
+  dealsFound      Int       @default(0)
+  errors          Int       @default(0)
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+}
+
+model TelegramChannel {
+  id            String    @id @default(uuid())
+  name          String
+  username      String    @unique
+  members       Int       @default(0)
+  isActive      Boolean   @default(true)
+  autoPublish   Boolean   @default(false)
+  categories    String    // Stored as JSON string
+}
