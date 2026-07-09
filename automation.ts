@@ -11,7 +11,12 @@ const COMPETITOR_CHANNELS = [
   'GrabOnIndiaOfficial',
   'Bigtricks',
   'offerbot',
-  'IndiaFreeStuff'
+  'IndiaFreeStuff',
+  'amazinglootsdealsoffers',
+  'lootdealsk_Alibaba_dc_DealDost',
+  'LOOTS_DEAL_OFFER_ONLINE_SHOPPING',
+  'TrickXpert',
+  'under_99_loot_deals'
 ];
 
 // Target Distribution Channels

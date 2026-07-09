@@ -20,15 +20,42 @@ interface DealMessageParams {
 export function generateDealCaption(deal: DealMessageParams, platform: 'telegram' | 'whatsapp' = 'telegram'): string {
   const scoreStars = '⭐'.repeat(Math.round(deal.score / 20));
   
+  // Clean up title to remove promo handles, links, and duplicate spaces
+  const cleanTitle = deal.title
+    .replace(/@\w+/g, '') // remove handles
+    .replace(/https?:\/\/\S+/g, '') // remove HTTP links
+    .replace(/t\.me\/\S+/g, '') // remove telegram links
+    .replace(/(?:join|telegram|channel|subscribe|group|admin|click|link)/gi, '') // remove promotional words
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Random templates to avoid copy detection
+  const intros = [
+    `⚡ *Loot Alert!* ⚡`,
+    `🔥 *Hot Deal Spotted!* 🔥`,
+    `💥 *Massive Price Drop!* 💥`,
+    `🏷️ *Special Offer!* 🏷️`,
+    `✨ *Grab it Before it's Gone!* ✨`
+  ];
+  const mrpLabels = [`MRP`, `Original Price`, `Retail Price`];
+  const dealLabels = [`Deal Price`, `Offer Price`, `Loot Price`, `Grab for`];
+  
+  // Use a pseudo-random index based on the title length so it's consistent for the same deal,
+  // or pure random if we want absolute variety
+  const seed = cleanTitle.length || 0;
+  const intro = intros[seed % intros.length];
+  const mrpLabel = mrpLabels[seed % mrpLabels.length];
+  const dealLabel = dealLabels[seed % dealLabels.length];
+
   if (platform === 'whatsapp') {
     // WhatsApp Formatting: *bold*, _italic_, ~strikethrough~
-    let msg = `🔥 *MASSIVE PRICE DROP!* 🔥\n\n`;
-    msg += `*${deal.title.substring(0, 80)}...*\n\n`;
+    let msg = `${intro.replace(/\*/g, '')}\n\n`;
+    msg += `*${cleanTitle.substring(0, 80)}...*\n\n`;
     
     if (deal.originalPrice) {
-      msg += `❌ MRP: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
+      msg += `❌ ${mrpLabel}: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
     }
-    msg += `✅ *Deal Price: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
+    msg += `✅ *${dealLabel}: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
     
     if (deal.discountPct) {
       msg += ` _(${deal.discountPct}% OFF)_`;
@@ -46,21 +73,21 @@ export function generateDealCaption(deal: DealMessageParams, platform: 'telegram
   }
 
   // Telegram Formatting: Markdown parsing used by the bot
-  let msg = `🔥 *Massive Deal Found!* 🔥\n\n`;
-  msg += `*${deal.title}*\n\n`;
+  let msg = `${intro}\n\n`;
+  msg += `*${cleanTitle}*\n\n`;
   
   if (deal.originalPrice && deal.originalPrice > 0) {
-    msg += `❌ MRP: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
+    msg += `❌ ${mrpLabel}: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
   }
   
   if (deal.dealPrice > 0) {
-    msg += `✅ *Deal Price: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
+    msg += `✅ *${dealLabel}: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
     if (deal.discountPct && deal.discountPct > 0) {
       msg += ` _(${deal.discountPct}% OFF)_`;
     }
     msg += `\n\n`;
   } else {
-    msg += `✅ *Massive Discount Available!*\n👉 Click the link to reveal current price.\n\n`;
+    msg += `✅ *Massive Discount Available!*\n👉 Click the link to check current price.\n\n`;
   }
 
   if (deal.bankOffer) {

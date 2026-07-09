@@ -49,8 +49,13 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
             }
           }
 
+          // Extract first line as the title
+          const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+          const rawTitle = lines.length > 0 ? lines[0] : text;
+          const dealTitle = rawTitle.length > 100 ? rawTitle.substring(0, 100) + '...' : rawTitle;
+
           deals.push({
-            title: text.substring(0, 100).replace(/\n/g, ' ') + '...',
+            title: dealTitle,
             link: amzLink,
             content: text,
             pubDate: time,
