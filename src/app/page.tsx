@@ -195,7 +195,7 @@ function DashboardView() {
                   contentStyle={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-secondary)', borderRadius: '12px' }}
                   itemStyle={{ color: 'var(--text-primary)' }}
                   labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
-                  formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+                  formatter={(value: any) => [formatCurrency(value || 0), 'Revenue']}
                 />
                 <Area type="monotone" dataKey="value" stroke="var(--accent-primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
               </AreaChart>

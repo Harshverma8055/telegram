@@ -106,7 +106,7 @@ async function runAutomationCycle() {
       }
 
     } catch (err: any) {
-      console.error(`Error processing feed ${feedUrl}:`, err.message);
+      console.error(`Error processing channel ${channel}:`, err.message);
     }
   }
   
