@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
 import { fetchTelegramDeals, extractAmazonASIN } from '@/lib/scrapers/rss';
 import { publishToTelegram } from '@/lib/telegram';
