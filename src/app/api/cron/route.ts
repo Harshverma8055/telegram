@@ -72,30 +72,47 @@ export async function GET(request: Request) {
           ? `https://www.amazon.in/dp/${asin}?tag=${affiliateTag}` 
           : `https://www.amazon.in/dp/${asin}`;
 
+        // ============================================================
+        // 3-LAYER PRIORITY SYSTEM (ALL FREE!)
+        // Layer 1: Direct Amazon scrape (rotating UA + mobile fallback)
+        // Layer 2: Telegram Link Preview (Telegram visited Amazon for us!)
+        // Layer 3: Telegram message text (last resort)
+        // ============================================================
+
         let finalTitle = item.title;
         let finalDealPrice = 0;
         let finalOriginalPrice = 0;
         let finalImageUrl = item.imageUrl || '';
+        let dataSource = 'telegram_text';
 
-        // TRY DIRECT AMAZON FETCH FOR 100% ACCURACY!
+        // LAYER 1: Try direct Amazon (3 sub-attempts: proxy, desktop, mobile)
         const amzData = await fetchAmazonDetails(asin);
         
         if (amzData && amzData.currentPrice > 0) {
-           console.log(`✅ Direct Amazon Scrape Success for ${asin}!`);
+           dataSource = 'amazon_direct';
            finalTitle = amzData.title;
            finalDealPrice = amzData.currentPrice;
            finalOriginalPrice = amzData.originalPrice;
            if (amzData.imageUrl) finalImageUrl = amzData.imageUrl;
-        } else {
-           console.log(`⚠️ Amazon Blocked Scrape for ${asin}, falling back to Telegram data...`);
-           
-           // Smart Price Extraction (Extract both Deal Price and MRP from Telegram)
+           console.log(`✅ [LAYER 1] Amazon direct: ${asin} → ₹${finalDealPrice}`);
+        }
+
+        // LAYER 2: If Amazon blocked us, use Telegram's own link preview!
+        // This is FREE and always accurate because Telegram visited Amazon itself.
+        if (dataSource !== 'amazon_direct' && item.previewTitle) {
+           dataSource = 'telegram_preview';
+           finalTitle = item.previewTitle;
+           console.log(`✅ [LAYER 2] Telegram preview title: ${finalTitle.substring(0, 50)}...`);
+        }
+
+        // LAYER 3: If we still have no price, parse Telegram text
+        if (finalDealPrice === 0) {
            const priceRegex = /(?:mrp|rs\.?|₹)\s*[:~]*\s*([0-9,]+)/gi;
-           const prices = [];
+           const prices: number[] = [];
            let match;
            while ((match = priceRegex.exec(item.content)) !== null) {
              const val = parseInt(match[1].replace(/,/g, ''), 10);
-             if (val > 0) prices.push(val);
+             if (val > 0 && val < 500000) prices.push(val); // Ignore crazy numbers
            }
            
            if (prices.length >= 2) {
@@ -105,13 +122,15 @@ export async function GET(request: Request) {
               finalDealPrice = prices[0];
               finalOriginalPrice = Math.round(finalDealPrice * 1.4);
            }
-
-           // Fallbacks
-           if (finalDealPrice === 0) finalDealPrice = 999;
-           if (finalOriginalPrice <= finalDealPrice) finalOriginalPrice = Math.round(finalDealPrice * 1.4);
+           console.log(`⚠️ [LAYER 3] Telegram text prices: deal=₹${finalDealPrice}, mrp=₹${finalOriginalPrice}`);
         }
 
+        // Final safety nets
+        if (finalDealPrice === 0) finalDealPrice = 999;
+        if (finalOriginalPrice <= finalDealPrice) finalOriginalPrice = Math.round(finalDealPrice * 1.4);
         const discountPct = Math.round(((finalOriginalPrice - finalDealPrice) / finalOriginalPrice) * 100);
+        
+        console.log(`📊 Final: "${finalTitle.substring(0, 40)}..." ₹${finalDealPrice} (MRP: ₹${finalOriginalPrice}, ${discountPct}% OFF) [${dataSource}]`);
 
         // Save product
         const product = await prisma.product.create({
