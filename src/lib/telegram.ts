@@ -129,11 +129,21 @@ export async function publishToTelegram(dealId: string, channelId: string) {
     });
 
     if (bot) {
+      const buttonOptions = [
+        '👉 Check Offer',
+        '⚡ Check Deal',
+        '🛍️ View Deal',
+        '🔥 Grab Offer',
+        '🎯 Check Price'
+      ];
+      // Keep button text consistent per post, but diverse across different products
+      const buttonText = buttonOptions[deal.product.title.length % buttonOptions.length];
+
       const inlineKeyboard = {
         inline_keyboard: [
           [
             {
-              text: '🛒 BUY NOW',
+              text: buttonText,
               url: deal.affiliateUrl || deal.product.url
             }
           ]

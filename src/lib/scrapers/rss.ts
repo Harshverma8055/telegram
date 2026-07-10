@@ -336,7 +336,7 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
     for (const sel of priceSelectors) {
       const priceText = $(sel).first().text().trim();
       if (priceText) {
-        const parsed = parseInt(priceText.replace(/[^0-9]/g, ''), 10);
+        const parsed = parsePrice(priceText);
         if (parsed > 0) { currentPrice = parsed; break; }
       }
     }
@@ -351,7 +351,7 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
     for (const sel of mrpSelectors) {
       const mrpText = $(sel).first().text().trim();
       if (mrpText) {
-        const parsed = parseInt(mrpText.replace(/[^0-9]/g, ''), 10);
+        const parsed = parsePrice(mrpText);
         if (parsed > 0) { originalPrice = parsed; break; }
       }
     }
@@ -359,7 +359,7 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
     // Also try the "M.R.P." row
     const mrpRow = $('span:contains("M.R.P.")').parent().find('.a-offscreen, .a-text-price').first().text().trim();
     if (mrpRow) {
-      const parsed = parseInt(mrpRow.replace(/[^0-9]/g, ''), 10);
+      const parsed = parsePrice(mrpRow);
       if (parsed > originalPrice) originalPrice = parsed;
     }
     
@@ -377,4 +377,17 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
     console.log(`❌ Amazon ${mode} scrape failed for ${asin}`);
     return null;
   }
+}
+
+// Cleanly extracts a price sequence and avoids text concatenation bug
+function parsePrice(text: string): number {
+  if (!text) return 0;
+  // Match the first sequence of digits potentially containing commas and periods
+  const match = text.match(/(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/i);
+  if (!match) return 0;
+  
+  // Clean all characters except digits
+  const clean = match[1].replace(/,/g, '');
+  const parsed = parseFloat(clean);
+  return isNaN(parsed) ? 0 : Math.round(parsed);
 }
