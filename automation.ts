@@ -22,6 +22,57 @@ const COMPETITOR_CHANNELS = [
 // Target Distribution Channels
 const TELEGRAM_CHANNEL = '@fantasticofffer';
 
+const SUPER_PRIORITY_KEYWORDS = [
+  'bag', 'luggage', 'suitcase', 'duffel', 'backpack', 'tote', 'handbag', 'purse',
+  'shoes', 'sneakers', 'sandal', 'slipper', 'crocs', 'heel', 'boot',
+  'watch', 'perfume', 'deodorant', 'deo', 'spray', 'lipstick', 'makeup', 'eyeliner',
+  'kajal', 'cream', 'moisturizer', 'sunscreen', 'face wash', 'scrub', 'shampoo',
+  'conditioner', 'hair oil', 'serum', 'lotion', 'jewelry', 'jewellery', 'necklace',
+  'ring', 'earring', 'bracelet', 'bangle', 'gold', 'silver', 'lipstick', 'skincare'
+];
+
+const COLLEGE_ESSENTIALS_KEYWORDS = [
+  'umbrella', 'raincoat', 'rain coat', 'bottle', 'flask', 'lunch box', 'lunchbox',
+  'pen', 'pencil', 'notebook', 'register', 'diary', 'calculator', 'marker', 'highlighter',
+  'laptop sleeve', 'laptop bag', 'mouse', 'keyboard', 'headphone', 'earbuds', 'earphone',
+  'powerbank', 'power bank', 'charger', 'sports', 'cricket', 'badminton', 'football',
+  'basketball', 'racket', 'shuttle', 'gym', 'dumbbells', 't-shirt', 'tshirt', 'jeans',
+  'hoodie', 'jacket', 'socks', 'card holder', 'wallet'
+];
+
+const LOW_PRIORITY_KEYWORDS = [
+  'ac', 'air conditioner', 'refrigerator', 'fridge', 'tv', 'television', 'washing machine',
+  'geyser', 'microwave', 'oven', 'chimney', 'dishwasher', 'furniture', 'sofa', 'mattress'
+];
+
+function calculatePriorityScore(title: string): number {
+  let score = 0;
+  const lower = title.toLowerCase();
+
+  for (const kw of SUPER_PRIORITY_KEYWORDS) {
+    if (lower.includes(kw)) {
+      score += 40;
+      break;
+    }
+  }
+
+  for (const kw of COLLEGE_ESSENTIALS_KEYWORDS) {
+    if (lower.includes(kw)) {
+      score += 30;
+      break;
+    }
+  }
+
+  for (const kw of LOW_PRIORITY_KEYWORDS) {
+    if (lower.includes(kw)) {
+      score -= 20;
+      break;
+    }
+  }
+
+  return score;
+}
+
 async function runAutomationCycle() {
   console.log(`\n[${new Date().toLocaleTimeString()}] Starting Auto-Deal Cycle...`);
 
@@ -63,6 +114,10 @@ async function runAutomationCycle() {
           ? `https://www.amazon.in/dp/${asin}?tag=${affiliateTag}` 
           : `https://www.amazon.in/dp/${asin}`;
 
+        const titleText = item.title || item.previewTitle || '';
+        const priorityAdjustment = calculatePriorityScore(titleText);
+        const dealScore = Math.max(10, Math.min(100, 75 + priorityAdjustment));
+
         // Save to Database (sanitize title first)
         const product = await prisma.product.create({
           data: {
@@ -80,7 +135,7 @@ async function runAutomationCycle() {
             productId: product.id,
             platformId: platform.id,
             dealType: 'price_drop',
-            dealScore: 80, // Assume good score if posted on a deals forum
+            dealScore: dealScore, 
             dealPrice: 0, 
             affiliateUrl: affiliateUrl,
             isGenuine: true,
