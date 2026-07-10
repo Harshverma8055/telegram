@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { fetchTelegramDeals, extractAmazonASIN } from './src/lib/scrapers/rss';
+import { fetchTelegramDeals, extractAmazonASIN, resolveASIN } from './src/lib/scrapers/rss';
 import { publishToTelegram, sanitizeTitle } from './src/lib/telegram';
 
 const prisma = new PrismaClient();
@@ -25,15 +25,17 @@ const TELEGRAM_CHANNEL = '@fantasticofffer';
 async function runAutomationCycle() {
   console.log(`\n[${new Date().toLocaleTimeString()}] Starting Auto-Deal Cycle...`);
 
-  for (const channel of COMPETITOR_CHANNELS) {
+  const shuffledChannels = [...COMPETITOR_CHANNELS].sort(() => Math.random() - 0.5);
+
+  for (const channel of shuffledChannels) {
     console.log(`\n📡 Checking Competitor Channel: @${channel}`);
     try {
       const deals = await fetchTelegramDeals(channel);
       console.log(`Found ${deals.length} recent posts.`);
 
       for (const item of deals) {
-        // Look for an Amazon link inside the post content or URL
-        const asin = extractAmazonASIN(item.link + ' ' + item.content);
+        // Use the global resolver to expand shortlinks and extract the ASIN
+        const asin = await resolveASIN(item.link, item.content);
         
         if (!asin) continue; // Skip if it's not an Amazon deal
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
-import { fetchTelegramDeals, extractAmazonASIN, fetchAmazonDetails } from '@/lib/scrapers/rss';
+import { fetchTelegramDeals, extractAmazonASIN, fetchAmazonDetails, resolveASIN } from '@/lib/scrapers/rss';
 import { publishToTelegram, sanitizeTitle } from '@/lib/telegram';
 
 const COMPETITOR_CHANNELS = [
@@ -37,8 +37,18 @@ export async function GET(request: Request) {
     let dealsSkippedCount = 0;
     let timeLimitReached = false;
 
-    for (const channel of COMPETITOR_CHANNELS) {
+    // Shuffle channels so each cron run scrapes a different random subset of competitor channels
+    const shuffledChannels = [...COMPETITOR_CHANNELS].sort(() => Math.random() - 0.5);
+
+    for (const channel of shuffledChannels) {
       if (timeLimitReached || dealsFoundCount >= MAX_NEW_DEALS_PER_RUN) break;
+
+      // Check timeout BEFORE making a network request to scrape a new channel
+      if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
+        console.log('⏰ Time limit reached before scraping channel:', channel);
+        timeLimitReached = true;
+        break;
+      }
 
       const deals = await fetchTelegramDeals(channel);
       
@@ -50,19 +60,8 @@ export async function GET(request: Request) {
         }
         if (dealsFoundCount >= MAX_NEW_DEALS_PER_RUN) break;
 
-        let textToSearch = item.link + ' ' + item.content;
-        let asin = extractAmazonASIN(textToSearch);
-
-        // If it's a shortlink and we didn't find an ASIN, we must expand it!
-        if (!asin && item.link.includes('amzn.to')) {
-          try {
-            const expandRes = await fetch(item.link, { redirect: 'follow' });
-            asin = extractAmazonASIN(expandRes.url);
-          } catch (e) {
-            console.error('Failed to expand shortlink:', item.link);
-          }
-        }
-
+        // Use the global resolver to expand shortlinks and extract the ASIN
+        const asin = await resolveASIN(item.link, item.content);
         if (!asin) continue;
 
         const platform = await prisma.platform.upsert({

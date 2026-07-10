@@ -58,7 +58,17 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
         if (href) links.push(href);
       });
 
-      const amzLink = links.find(l => l.includes('amazon.in') || l.includes('amzn.to')) || '';
+      const amzLink = links.find(l => {
+        const lower = l.toLowerCase();
+        return lower.includes('amazon.in') || 
+               lower.includes('amzn.to') || 
+               lower.includes('grbn.in') || 
+               lower.includes('amazn.lt') ||
+               lower.includes('link.amazon') ||
+               lower.includes('bitly.in') ||
+               lower.includes('bitiy.in') ||
+               lower.includes('amazn.to');
+      }) || '';
 
       if (amzLink) {
         // Prevent scraping old backlog deals (older than 24 hours)
@@ -141,9 +151,42 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
 
 // Helper to extract an Amazon ASIN if it exists in the RSS text/link
 export function extractAmazonASIN(text: string): string | null {
-  const asinMatch = text.match(/\/(?:dp|product)\/([A-Z0-9]{10})/i);
-  if (asinMatch) return asinMatch[1];
+  // Pattern 1: Standard amazon dp/gp/product URL
+  const standardMatch = text.match(/\/(?:dp|gp\/product|product)\/([A-Z0-9]{10})/i);
+  if (standardMatch) return standardMatch[1].toUpperCase();
+  
+  // Pattern 2: Shortlinks ending with 10-char ASIN (e.g. link.amazon/B097X7qOS)
+  const shortMatch = text.match(/(?:link\.amazon|amzn\.to|amazn\.lt|grbn\.in|bitly\.in|bitiy\.in)\/([A-Z0-9]{10})(?:[?&/]|$)/i);
+  if (shortMatch) return shortMatch[1].toUpperCase();
+
+  // Pattern 3: Any 10-character alphanumeric starting with B0/B (standard ASINs)
+  const generalMatch = text.match(/\b(B0[A-Z0-9]{8})\b/i);
+  if (generalMatch) return generalMatch[1].toUpperCase();
+
   return null;
+}
+
+// Global helper to resolve ASIN (with shortlink expansion if needed)
+export async function resolveASIN(link: string, content: string): Promise<string | null> {
+  let asin = extractAmazonASIN(link + ' ' + content);
+  if (asin) return asin;
+
+  const isShortlink = link.includes('amzn.to') || 
+                      link.includes('grbn.in') || 
+                      link.includes('amazn.lt') || 
+                      link.includes('link.amazon') ||
+                      link.includes('bitly.in') ||
+                      link.includes('bitiy.in') ||
+                      link.includes('amazn.to');
+  if (isShortlink) {
+    try {
+      const expandRes = await fetch(link, { redirect: 'follow' });
+      asin = extractAmazonASIN(expandRes.url);
+    } catch (e) {
+      console.error('Failed to expand shortlink:', link);
+    }
+  }
+  return asin;
 }
 
 // =====================================================================
