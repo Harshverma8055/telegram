@@ -28,15 +28,28 @@ export async function GET(request: Request) {
   }
 
   console.log('📡 Starting Vercel Cron: Deal Scraper...');
+  const startTime = Date.now();
+  const MAX_EXECUTION_TIME_MS = 8000; // 8 seconds limit for Vercel Free Tier (10s max)
+  const MAX_NEW_DEALS_PER_RUN = 5; // Only process 5 new deals at a time
 
   try {
     let dealsFoundCount = 0;
     let dealsSkippedCount = 0;
+    let timeLimitReached = false;
 
     for (const channel of COMPETITOR_CHANNELS) {
+      if (timeLimitReached || dealsFoundCount >= MAX_NEW_DEALS_PER_RUN) break;
+
       const deals = await fetchTelegramDeals(channel);
       
       for (const item of deals) {
+        if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
+          console.log('⏰ Reaching Vercel 10s timeout limit. Stopping early to save progress.');
+          timeLimitReached = true;
+          break;
+        }
+        if (dealsFoundCount >= MAX_NEW_DEALS_PER_RUN) break;
+
         let textToSearch = item.link + ' ' + item.content;
         let asin = extractAmazonASIN(textToSearch);
 
@@ -62,7 +75,10 @@ export async function GET(request: Request) {
           where: { platformId_externalId: { platformId: platform.id, externalId: asin } }
         });
 
-        if (existingDeal) continue; // Skip duplicates
+        if (existingDeal) {
+          dealsSkippedCount++;
+          continue; // Skip duplicates
+        }
 
         // Generate affiliate link (ALWAYS use our own tag, never competitor's)
         const affiliateTag = process.env.AMAZON_AFFILIATE_TAG || '';
