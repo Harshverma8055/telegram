@@ -147,12 +147,74 @@ export function extractAmazonASIN(text: string): string | null {
 }
 
 // =====================================================================
-// DIRECT AMAZON SCRAPER — 3-layer free bypass system!
+// AMAZON PA-API (OFFICIAL API — NEVER BLOCKED, 100% ACCURATE!)
+// This is the same API that premium deal bots use. Free for affiliates.
+// To activate: Add AMAZON_ACCESS_KEY and AMAZON_SECRET_KEY in Vercel env.
+// =====================================================================
+async function fetchFromPAAPI(asin: string) {
+  const accessKey = process.env.AMAZON_ACCESS_KEY;
+  const secretKey = process.env.AMAZON_SECRET_KEY;
+  const partnerTag = process.env.AMAZON_AFFILIATE_TAG;
+  
+  if (!accessKey || !secretKey || !partnerTag) return null;
+
+  try {
+    const amazonPaapi = require('amazon-paapi');
+    
+    const commonParameters = {
+      AccessKey: accessKey,
+      SecretKey: secretKey,
+      PartnerTag: partnerTag,
+      PartnerType: 'Associates',
+      Marketplace: 'www.amazon.in',
+    };
+
+    const requestParameters = {
+      ASIN: [asin],
+      Resources: [
+        'ItemInfo.Title',
+        'Offers.Listings.Price',
+        'Offers.Listings.SavingBasis',
+        'Offers.Listings.MerchantInfo',
+        'Images.Primary.Large',
+      ],
+    };
+
+    const data = await amazonPaapi.GetItems(commonParameters, requestParameters);
+
+    if (data?.ItemsResult?.Items?.length > 0) {
+      const item = data.ItemsResult.Items[0];
+      
+      const title = item.ItemInfo?.Title?.DisplayValue || '';
+      const listing = item.Offers?.Listings?.[0];
+      const currentPrice = listing?.Price?.Amount ? Math.round(listing.Price.Amount) : 0;
+      const originalPrice = listing?.SavingBasis?.Amount ? Math.round(listing.SavingBasis.Amount) : currentPrice;
+      const imageUrl = item.Images?.Primary?.Large?.URL || '';
+
+      if (title && currentPrice > 0) {
+        console.log(`🏆 [PA-API] Perfect data: ${asin} → ₹${currentPrice} (MRP: ₹${originalPrice})`);
+        return { title, currentPrice, originalPrice, imageUrl };
+      }
+    }
+    return null;
+  } catch (error: any) {
+    console.log(`❌ PA-API failed for ${asin}: ${error.message || 'unknown error'}`);
+    return null;
+  }
+}
+
+// =====================================================================
+// MASTER AMAZON FETCHER — 4-layer priority system!
+// Layer 0: Amazon PA-API (OFFICIAL — never blocked, 100% accurate)
 // Layer 1: ScraperAPI proxy (if user has premium key)
 // Layer 2: Direct fetch with rotating User-Agent + random delay
 // Layer 3: Amazon mobile site (weaker bot detection)
 // =====================================================================
 export async function fetchAmazonDetails(asin: string) {
+  // Layer 0: Official Amazon PA-API (THE BEST — if keys are configured)
+  const paResult = await fetchFromPAAPI(asin);
+  if (paResult) return paResult;
+
   // Layer 1: Premium proxy (if available)
   if (process.env.SCRAPER_API_KEY) {
     const result = await tryAmazonFetch(asin, 'proxy');
