@@ -49,9 +49,17 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
             }
           }
 
-          // Extract first line as the title
+          // Extract smarter title (skip coupons, URLs, and very short lines)
           const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-          const rawTitle = lines.length > 0 ? lines[0] : text;
+          let rawTitle = lines.length > 0 ? lines[0] : text;
+          for (const line of lines) {
+             const lowerLine = line.toLowerCase();
+             if (lowerLine.includes('apply') && lowerLine.includes('coupon')) continue;
+             if (lowerLine.includes('http') || lowerLine.includes('amzn.to')) continue;
+             if (line.length < 8) continue;
+             rawTitle = line;
+             break;
+          }
           const dealTitle = rawTitle.length > 100 ? rawTitle.substring(0, 100) + '...' : rawTitle;
 
           deals.push({

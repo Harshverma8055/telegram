@@ -72,12 +72,31 @@ export async function GET(request: Request) {
           ? `https://www.amazon.in/dp/${asin}?tag=${affiliateTag}` 
           : `https://www.amazon.in/dp/${asin}`;
 
-        // Try to extract price from Telegram text (e.g., "Rs 399" or "@ 38999" or "₹400")
-        const priceMatch = item.content.match(/(?:rs\.?|₹|@)\s*([0-9,]+)/i);
-        let extractedPrice = 0;
-        if (priceMatch) {
-          extractedPrice = parseInt(priceMatch[1].replace(/,/g, ''), 10);
+        // Smart Price Extraction (Extract both Deal Price and MRP)
+        const priceRegex = /(?:mrp|rs\.?|₹)\s*[:~]*\s*([0-9,]+)/gi;
+        const prices = [];
+        let match;
+        while ((match = priceRegex.exec(item.content)) !== null) {
+          const val = parseInt(match[1].replace(/,/g, ''), 10);
+          if (val > 0) prices.push(val);
         }
+        
+        let extractedPrice = 0;
+        let originalPrice = 0;
+
+        if (prices.length >= 2) {
+           // Usually the higher price is MRP and lower is Deal Price
+           originalPrice = Math.max(...prices);
+           extractedPrice = Math.min(...prices);
+        } else if (prices.length === 1) {
+           extractedPrice = prices[0];
+           originalPrice = Math.round(extractedPrice * 1.4);
+        }
+
+        // Fallbacks
+        if (extractedPrice === 0) extractedPrice = 999;
+        if (originalPrice <= extractedPrice) originalPrice = Math.round(extractedPrice * 1.4);
+        const discountPct = Math.round(((originalPrice - extractedPrice) / originalPrice) * 100);
 
         // Save product
         const product = await prisma.product.create({
@@ -99,8 +118,8 @@ export async function GET(request: Request) {
             dealType: 'price_drop',
             dealScore: 85,
             dealPrice: extractedPrice, 
-            originalPrice: extractedPrice > 0 ? Math.round(extractedPrice * 1.4) : 0, 
-            discountPct: extractedPrice > 0 ? 40 : 0,
+            originalPrice: originalPrice, 
+            discountPct: discountPct,
             affiliateUrl: affiliateUrl,
             isGenuine: true,
             isPublished: true, // Auto-publish mode enabled!
