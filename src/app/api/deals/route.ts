@@ -25,7 +25,7 @@ export async function GET(request: Request) {
           product: true,
           platform: true,
         },
-        orderBy: { dealScore: 'desc' },
+        orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
       }),
