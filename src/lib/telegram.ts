@@ -15,89 +15,94 @@ interface DealMessageParams {
   imageUrl?: string | null;
   score: number;
   bankOffer?: string | null;
+  isVerified?: boolean; // NEW: Whether price data is from Amazon directly
+}
+
+// =====================================================================
+// TITLE SANITIZER — Removes ALL traces of competitor channels
+// =====================================================================
+function sanitizeTitle(rawTitle: string): string {
+  return rawTitle
+    // Remove all types of links
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/:\/\/\S+/gi, '')
+    .replace(/(?:www\.)?amazon\.in\S*/gi, '')
+    .replace(/amzn\.to\S*/gi, '')
+    .replace(/t\.me\/\S*/gi, '')
+    // Remove affiliate tags (e.g., ?tag=Rickeykaran77-21)
+    .replace(/[?&]tag=\S+/gi, '')
+    // Remove @handles
+    .replace(/@\w+/g, '')
+    // Remove promotional keywords
+    .replace(/(?:join|telegram|channel|subscribe|group|admin|click here|link below|check bio)/gi, '')
+    // Remove emoji spam at start/end
+    .replace(/^[🔥⚡💥🏷️✨🎯💰🛒👇👆🔗📢]+/, '')
+    .replace(/[🔥⚡💥🏷️✨🎯💰🛒👇👆🔗📢]+$/, '')
+    // Clean up whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function generateDealCaption(deal: DealMessageParams, platform: 'telegram' | 'whatsapp' = 'telegram'): string {
-  const scoreStars = '⭐'.repeat(Math.round(deal.score / 20));
+  const cleanTitle = sanitizeTitle(deal.title);
   
-  // Clean up title to remove promo handles, links, and duplicate spaces
-  const cleanTitle = deal.title
-    .replace(/@\w+/g, '') // remove handles
-    .replace(/https?:\/\/\S+/gi, '') // remove HTTP links
-    .replace(/:\/\/\S+/gi, '') // remove broken links
-    .replace(/(?:www\.)?amazon\.in\S+/gi, '') // remove any raw amazon links
-    .replace(/amzn\.to\S+/gi, '') // remove any raw shortlinks
-    .replace(/t\.me\/\S+/gi, '') // remove telegram links
-    .replace(/(?:join|telegram|channel|subscribe|group|admin|click|link)/gi, '') // remove promotional words
-    .replace(/\s+/g, ' ')
-    .trim();
-
   // Random templates to avoid copy detection
   const intros = [
-    `⚡ *Loot Alert!* ⚡`,
-    `🔥 *Hot Deal Spotted!* 🔥`,
-    `💥 *Massive Price Drop!* 💥`,
-    `🏷️ *Special Offer!* 🏷️`,
-    `✨ *Grab it Before it's Gone!* ✨`
+    `⚡ Loot Alert! ⚡`,
+    `🔥 Hot Deal Spotted! 🔥`,
+    `💥 Massive Price Drop! 💥`,
+    `🏷️ Special Offer! 🏷️`,
+    `✨ Grab it Before it's Gone! ✨`,
+    `🎯 Deal of the Day! 🎯`,
+    `💰 Mega Savings! 💰`,
   ];
-  const mrpLabels = [`MRP`, `Original Price`, `Retail Price`];
-  const dealLabels = [`Deal Price`, `Offer Price`, `Loot Price`, `Grab for`];
   
-  // Use a pseudo-random index based on the title length so it's consistent for the same deal,
-  // or pure random if we want absolute variety
   const seed = cleanTitle.length || 0;
   const intro = intros[seed % intros.length];
-  const mrpLabel = mrpLabels[seed % mrpLabels.length];
-  const dealLabel = dealLabels[seed % dealLabels.length];
 
   if (platform === 'whatsapp') {
-    // WhatsApp Formatting: *bold*, _italic_, ~strikethrough~
-    let msg = `${intro.replace(/\*/g, '')}\n\n`;
-    msg += `*${cleanTitle.substring(0, 80)}...*\n\n`;
+    let msg = `${intro}\n\n`;
+    msg += `*${cleanTitle.substring(0, 100)}*\n\n`;
     
-    if (deal.originalPrice) {
-      msg += `❌ ${mrpLabel}: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
+    if (deal.dealPrice > 0 && deal.originalPrice && deal.originalPrice > 0) {
+      msg += `❌ MRP: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
+      msg += `✅ *Deal Price: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
+      if (deal.discountPct && deal.discountPct > 0) {
+        msg += ` _(${deal.discountPct}% OFF)_`;
+      }
+      msg += `\n\n`;
+    } else {
+      msg += `✅ *Great Deal Available!*\n👉 Check the latest price on Amazon\n\n`;
     }
-    msg += `✅ *${dealLabel}: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
     
-    if (deal.discountPct) {
-      msg += ` _(${deal.discountPct}% OFF)_`;
-    }
-    msg += `\n\n`;
-
-    if (deal.bankOffer) {
-      msg += `🏦 *Extra Offer:* ${deal.bankOffer}\n\n`;
-    }
-
-    msg += `Deal Quality: ${scoreStars}\n\n`;
-    msg += `👇 *Buy Now Link:* 👇\n${deal.affiliateUrl}`;
-    
+    msg += `👇 *Buy Now:* 👇\n${deal.affiliateUrl}`;
     return msg;
   }
 
-  // Telegram Formatting: Markdown parsing used by the bot
+  // =====================================================================
+  // TELEGRAM CAPTION — Two modes based on price verification
+  // =====================================================================
   let msg = `${intro}\n\n`;
   msg += `*${cleanTitle}*\n\n`;
   
-  if (deal.originalPrice && deal.originalPrice > 0) {
-    msg += `❌ ${mrpLabel}: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
-  }
-  
-  if (deal.dealPrice > 0) {
-    msg += `✅ *${dealLabel}: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
+  if (deal.dealPrice > 0 && deal.originalPrice && deal.originalPrice > 0) {
+    // ✅ VERIFIED: We have real prices from Amazon — show them proudly!
+    msg += `❌ MRP: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
+    msg += `✅ *Deal Price: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
     if (deal.discountPct && deal.discountPct > 0) {
       msg += ` _(${deal.discountPct}% OFF)_`;
     }
     msg += `\n\n`;
   } else {
-    msg += `✅ *Massive Discount Available!*\n👉 Click the link to check current price.\n\n`;
+    // ⚠️ UNVERIFIED: We don't have confirmed prices — be honest!
+    msg += `✅ *Amazing Deal Available on Amazon!*\n`;
+    msg += `👉 _Tap the button below to check the latest price_\n\n`;
   }
 
   if (deal.bankOffer) {
-    msg += `🏦 *Extra Offer:* ${deal.bankOffer}\n\n`;
+    msg += `🏦 *Bank Offer:* ${deal.bankOffer}\n\n`;
   }
 
-  msg += `Deal Quality: ${scoreStars} (${deal.score}/100)\n\n`;
   msg += `👇 *Buy Now (Link in button below)* 👇`;
 
   return msg;
@@ -120,9 +125,9 @@ export async function publishToTelegram(dealId: string, channelId: string) {
       affiliateUrl: deal.affiliateUrl || deal.product.url,
       score: deal.dealScore,
       bankOffer: deal.bankOffer,
+      isVerified: deal.isGenuine,
     });
 
-    // In a real scenario with a valid bot token:
     if (bot) {
       const inlineKeyboard = {
         inline_keyboard: [
@@ -148,7 +153,6 @@ export async function publishToTelegram(dealId: string, channelId: string) {
         });
       }
     } else {
-      // Simulation mode
       console.log(`[SIMULATION] Sending to ${channelId}:\n${caption}`);
     }
 
