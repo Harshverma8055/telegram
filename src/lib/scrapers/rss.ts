@@ -89,4 +89,49 @@ export function extractAmazonASIN(text: string): string | null {
 }
 
 
+export async function fetchAmazonDetails(asin: string) {
+  try {
+    const url = `https://www.amazon.in/dp/${asin}`;
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+      timeout: 10000
+    });
 
+    const $ = cheerio.load(response.data);
+    
+    // Extract Title
+    let title = $('#productTitle').text().trim();
+    if (!title) return null; // If no title, page failed or is captcha
+
+    // Extract Deal Price
+    let currentPrice = 0;
+    const priceText = $('.a-price-whole').first().text().trim();
+    if (priceText) {
+      currentPrice = parseInt(priceText.replace(/[,.]/g, ''), 10);
+    }
+
+    // Extract Original Price (MRP)
+    let originalPrice = currentPrice;
+    const mrpText = $('.a-text-price .a-offscreen').first().text().trim();
+    if (mrpText) {
+      originalPrice = parseInt(mrpText.replace(/[^0-9]/g, ''), 10);
+    }
+    
+    // Extract Image
+    const imageUrl = $('#landingImage').attr('src') || '';
+
+    // Fix edge cases where MRP is lower than price for some reason
+    if (originalPrice < currentPrice) {
+       originalPrice = Math.round(currentPrice * 1.4);
+    }
+
+    return { title, currentPrice, originalPrice, imageUrl };
+  } catch (error) {
+    console.error(`Direct Amazon Scrape Failed for ${asin}`);
+    return null; // Return null so we can fallback to Telegram data
+  }
+}

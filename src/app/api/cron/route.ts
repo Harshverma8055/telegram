@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
-import { fetchTelegramDeals, extractAmazonASIN } from '@/lib/scrapers/rss';
+import { fetchTelegramDeals, extractAmazonASIN, fetchAmazonDetails } from '@/lib/scrapers/rss';
 import { publishToTelegram } from '@/lib/telegram';
 
 const COMPETITOR_CHANNELS = [
@@ -72,41 +72,56 @@ export async function GET(request: Request) {
           ? `https://www.amazon.in/dp/${asin}?tag=${affiliateTag}` 
           : `https://www.amazon.in/dp/${asin}`;
 
-        // Smart Price Extraction (Extract both Deal Price and MRP)
-        const priceRegex = /(?:mrp|rs\.?|₹)\s*[:~]*\s*([0-9,]+)/gi;
-        const prices = [];
-        let match;
-        while ((match = priceRegex.exec(item.content)) !== null) {
-          const val = parseInt(match[1].replace(/,/g, ''), 10);
-          if (val > 0) prices.push(val);
-        }
+        let finalTitle = item.title;
+        let finalDealPrice = 0;
+        let finalOriginalPrice = 0;
+        let finalImageUrl = item.imageUrl || '';
+
+        // TRY DIRECT AMAZON FETCH FOR 100% ACCURACY!
+        const amzData = await fetchAmazonDetails(asin);
         
-        let extractedPrice = 0;
-        let originalPrice = 0;
+        if (amzData && amzData.currentPrice > 0) {
+           console.log(`✅ Direct Amazon Scrape Success for ${asin}!`);
+           finalTitle = amzData.title;
+           finalDealPrice = amzData.currentPrice;
+           finalOriginalPrice = amzData.originalPrice;
+           if (amzData.imageUrl) finalImageUrl = amzData.imageUrl;
+        } else {
+           console.log(`⚠️ Amazon Blocked Scrape for ${asin}, falling back to Telegram data...`);
+           
+           // Smart Price Extraction (Extract both Deal Price and MRP from Telegram)
+           const priceRegex = /(?:mrp|rs\.?|₹)\s*[:~]*\s*([0-9,]+)/gi;
+           const prices = [];
+           let match;
+           while ((match = priceRegex.exec(item.content)) !== null) {
+             const val = parseInt(match[1].replace(/,/g, ''), 10);
+             if (val > 0) prices.push(val);
+           }
+           
+           if (prices.length >= 2) {
+              finalOriginalPrice = Math.max(...prices);
+              finalDealPrice = Math.min(...prices);
+           } else if (prices.length === 1) {
+              finalDealPrice = prices[0];
+              finalOriginalPrice = Math.round(finalDealPrice * 1.4);
+           }
 
-        if (prices.length >= 2) {
-           // Usually the higher price is MRP and lower is Deal Price
-           originalPrice = Math.max(...prices);
-           extractedPrice = Math.min(...prices);
-        } else if (prices.length === 1) {
-           extractedPrice = prices[0];
-           originalPrice = Math.round(extractedPrice * 1.4);
+           // Fallbacks
+           if (finalDealPrice === 0) finalDealPrice = 999;
+           if (finalOriginalPrice <= finalDealPrice) finalOriginalPrice = Math.round(finalDealPrice * 1.4);
         }
 
-        // Fallbacks
-        if (extractedPrice === 0) extractedPrice = 999;
-        if (originalPrice <= extractedPrice) originalPrice = Math.round(extractedPrice * 1.4);
-        const discountPct = Math.round(((originalPrice - extractedPrice) / originalPrice) * 100);
+        const discountPct = Math.round(((finalOriginalPrice - finalDealPrice) / finalOriginalPrice) * 100);
 
         // Save product
         const product = await prisma.product.create({
           data: {
             platformId: platform.id,
             externalId: asin,
-            title: item.title,
+            title: finalTitle,
             url: `https://www.amazon.in/dp/${asin}`,
-            currentPrice: extractedPrice, 
-            imageUrl: item.imageUrl,
+            currentPrice: finalDealPrice, 
+            imageUrl: finalImageUrl,
           }
         });
 
@@ -117,8 +132,8 @@ export async function GET(request: Request) {
             platformId: platform.id,
             dealType: 'price_drop',
             dealScore: 85,
-            dealPrice: extractedPrice, 
-            originalPrice: originalPrice, 
+            dealPrice: finalDealPrice, 
+            originalPrice: finalOriginalPrice, 
             discountPct: discountPct,
             affiliateUrl: affiliateUrl,
             isGenuine: true,
