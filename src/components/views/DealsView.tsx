@@ -166,13 +166,23 @@ export default function DealsView() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>₹{deal.dealPrice?.toLocaleString('en-IN')}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {deal.originalPrice && (
-                           <span style={{ textDecoration: 'line-through' }}>₹{deal.originalPrice.toLocaleString('en-IN')}</span>
-                        )}
-                        <span style={{ color: 'var(--accent-emerald)', marginLeft: '6px', fontWeight: 600 }}>{deal.discount}% OFF</span>
-                      </div>
+                      {deal.dealPrice > 0 ? (
+                        <>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>₹{deal.dealPrice.toLocaleString('en-IN')}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {deal.originalPrice && deal.originalPrice > 0 && (
+                               <span style={{ textDecoration: 'line-through' }}>₹{deal.originalPrice.toLocaleString('en-IN')}</span>
+                            )}
+                            {deal.discount && deal.discount > 0 && (
+                              <span style={{ color: 'var(--accent-emerald)', marginLeft: '6px', fontWeight: 600 }}>{deal.discount}% OFF</span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          Unverified Price
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
