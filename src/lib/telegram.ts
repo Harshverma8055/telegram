@@ -23,8 +23,11 @@ export function generateDealCaption(deal: DealMessageParams, platform: 'telegram
   // Clean up title to remove promo handles, links, and duplicate spaces
   const cleanTitle = deal.title
     .replace(/@\w+/g, '') // remove handles
-    .replace(/https?:\/\/\S+/g, '') // remove HTTP links
-    .replace(/t\.me\/\S+/g, '') // remove telegram links
+    .replace(/https?:\/\/\S+/gi, '') // remove HTTP links
+    .replace(/:\/\/\S+/gi, '') // remove broken links
+    .replace(/(?:www\.)?amazon\.in\S+/gi, '') // remove any raw amazon links
+    .replace(/amzn\.to\S+/gi, '') // remove any raw shortlinks
+    .replace(/t\.me\/\S+/gi, '') // remove telegram links
     .replace(/(?:join|telegram|channel|subscribe|group|admin|click|link)/gi, '') // remove promotional words
     .replace(/\s+/g, ' ')
     .trim();

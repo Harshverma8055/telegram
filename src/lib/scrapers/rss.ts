@@ -91,14 +91,21 @@ export function extractAmazonASIN(text: string): string | null {
 
 export async function fetchAmazonDetails(asin: string) {
   try {
-    const url = `https://www.amazon.in/dp/${asin}`;
+    const amzUrl = `https://www.amazon.in/dp/${asin}`;
+    let url = amzUrl;
+    
+    // Premium Bot Bypass! If user adds SCRAPER_API_KEY to Vercel env, use it to bypass blocks!
+    if (process.env.SCRAPER_API_KEY) {
+       url = `http://api.scraperapi.com?api_key=${process.env.SCRAPER_API_KEY}&url=${encodeURIComponent(amzUrl)}&country_code=in`;
+    }
+
     const response = await axios.get(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
       },
-      timeout: 10000
+      timeout: 20000 // Give proxy more time to respond
     });
 
     const $ = cheerio.load(response.data);
@@ -131,7 +138,7 @@ export async function fetchAmazonDetails(asin: string) {
 
     return { title, currentPrice, originalPrice, imageUrl };
   } catch (error) {
-    console.error(`Direct Amazon Scrape Failed for ${asin}`);
+    console.error(`Amazon Scrape Failed for ${asin}`);
     return null; // Return null so we can fallback to Telegram data
   }
 }
