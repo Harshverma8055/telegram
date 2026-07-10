@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { fetchTelegramDeals, extractAmazonASIN } from './src/lib/scrapers/rss';
-import { publishToTelegram } from './src/lib/telegram';
+import { publishToTelegram, sanitizeTitle } from './src/lib/telegram';
 
 const prisma = new PrismaClient();
 
@@ -61,12 +61,12 @@ async function runAutomationCycle() {
           ? `https://www.amazon.in/dp/${asin}?tag=${affiliateTag}` 
           : `https://www.amazon.in/dp/${asin}`;
 
-        // Save to Database
+        // Save to Database (sanitize title first)
         const product = await prisma.product.create({
           data: {
             platformId: platform.id,
             externalId: asin,
-            title: item.title,
+            title: sanitizeTitle(item.title),
             url: `https://www.amazon.in/dp/${asin}`,
             currentPrice: 0, // Price is unknown via RSS, but they click the link to see it!
             imageUrl: item.imageUrl,

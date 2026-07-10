@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
 import { fetchTelegramDeals, extractAmazonASIN, fetchAmazonDetails } from '@/lib/scrapers/rss';
-import { publishToTelegram } from '@/lib/telegram';
+import { publishToTelegram, sanitizeTitle } from '@/lib/telegram';
 
 const COMPETITOR_CHANNELS = [
   'LootDealsIndia',
@@ -148,12 +148,12 @@ export async function GET(request: Request) {
         
         dealsFoundCount++;
 
-        // Save product
+        // Save product (sanitize title first to keep database and dashboard clean)
         const product = await prisma.product.create({
           data: {
             platformId: platform.id,
             externalId: asin,
-            title: finalTitle,
+            title: sanitizeTitle(finalTitle),
             url: `https://www.amazon.in/dp/${asin}`,
             currentPrice: finalDealPrice, 
             imageUrl: finalImageUrl,

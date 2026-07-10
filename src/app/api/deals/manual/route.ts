@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { sanitizeTitle } from '@/lib/telegram';
 
 export async function POST(request: Request) {
   try {
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
       data: {
         platformId: platform.id,
         externalId: asin,
-        title: title,
+        title: sanitizeTitle(title),
         url: link,
         currentPrice: price, 
       }

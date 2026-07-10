@@ -21,7 +21,7 @@ interface DealMessageParams {
 // =====================================================================
 // TITLE SANITIZER — Removes ALL traces of competitor channels
 // =====================================================================
-function sanitizeTitle(rawTitle: string): string {
+export function sanitizeTitle(rawTitle: string): string {
   return rawTitle
     // Remove all types of links
     .replace(/https?:\/\/\S+/gi, '')
