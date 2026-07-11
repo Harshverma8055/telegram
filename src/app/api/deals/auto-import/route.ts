@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { resolveDealUrl, fetchPageMetadata, fetchAmazonDetails } from '@/lib/scrapers/rss';
 import * as cheerio from 'cheerio';
 import axios from 'axios';
+import prisma from '@/lib/prisma';
 
 // Helper to scrape HTML and extract pricing info for Flipkart, Myntra, Ajio
 async function scrapePriceAndMRP(url: string, platform: string) {
@@ -129,25 +130,47 @@ export async function POST(request: Request) {
     let currentPrice = 0;
     let originalPrice = 0;
 
-    // 2. Fetch platform details
-    if (platform === 'amazon') {
-      const details = await fetchAmazonDetails(externalId);
-      if (details) {
-        title = details.title;
-        imageUrl = details.imageUrl || '';
-        currentPrice = details.currentPrice;
-        originalPrice = details.originalPrice;
+    // A. Check database first to avoid scraping blocks and speed up page load
+    const existingProduct = await prisma.product.findFirst({
+      where: {
+        platform: { slug: platform },
+        externalId: externalId
       }
+    });
+
+    if (existingProduct) {
+      title = existingProduct.title;
+      imageUrl = existingProduct.imageUrl || '';
+      currentPrice = existingProduct.currentPrice || 0;
+      originalPrice = existingProduct.mrp || 0;
     } else {
-      // Scrape Flipkart / Myntra / Ajio metadata and price info
-      const meta = await fetchPageMetadata(cleanUrl);
-      if (meta) {
-        title = meta.title;
-        imageUrl = meta.imageUrl;
+      // B. Fetch platform details if not cached in DB
+      if (platform === 'amazon') {
+        const details = await fetchAmazonDetails(externalId);
+        if (details) {
+          title = details.title;
+          imageUrl = details.imageUrl || '';
+          currentPrice = details.currentPrice;
+          originalPrice = details.originalPrice;
+        } else {
+          // Fallback to fetchPageMetadata to at least get Title and Image
+          const meta = await fetchPageMetadata(cleanUrl);
+          if (meta) {
+            title = meta.title;
+            imageUrl = meta.imageUrl;
+          }
+        }
+      } else {
+        // Scrape Flipkart / Myntra / Ajio metadata and price info
+        const meta = await fetchPageMetadata(cleanUrl);
+        if (meta) {
+          title = meta.title;
+          imageUrl = meta.imageUrl;
+        }
+        const prices = await scrapePriceAndMRP(cleanUrl, platform);
+        currentPrice = prices.price;
+        originalPrice = prices.mrp;
       }
-      const prices = await scrapePriceAndMRP(cleanUrl, platform);
-      currentPrice = prices.price;
-      originalPrice = prices.mrp;
     }
 
     // Standardize title (clean up "Buy ... online at Flipkart/Myntra/Ajio")
