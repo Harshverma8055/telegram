@@ -410,14 +410,40 @@ export async function resolveDealUrl(link: string, content: string = ''): Promis
   let targetUrl = link;
   const isShortlink = 
     link.includes('amzn.to') || link.includes('grbn.in') || link.includes('amazn.lt') || link.includes('link.amazon') ||
-    link.includes('bitly.in') || link.includes('bitiy.in') || link.includes('amazn.to') ||
+    link.includes('bitly.in') || link.includes('bitiy.in') || link.includes('amazn.to') || link.includes('amzn.in') ||
     link.includes('fkrt.co') || link.includes('fkrt.cc') || link.includes('fktr.in') ||
-    link.includes('myntr.in') || link.includes('ajio.co') || link.includes('bit.ly') || link.includes('tinyurl.com');
+    link.includes('myntr.in') || link.includes('ajio.co') || link.includes('bit.ly') || link.includes('tinyurl.com') ||
+    link.includes('earnkaro.com') || link.includes('ekaro.in') || link.includes('extrape.com') || link.includes('affiliate');
 
   if (isShortlink) {
     try {
-      const expandRes = await fetch(link, { redirect: 'follow' });
-      targetUrl = expandRes.url;
+      // Use axios which handles redirects better, and check for meta refresh
+      const expandRes = await axios.get(link, { 
+        maxRedirects: 10,
+        validateStatus: () => true,
+        headers: { 'User-Agent': getRandomUA() }
+      });
+      targetUrl = expandRes.request?.res?.responseUrl || link;
+
+      // Handle HTML meta refresh redirects (often used by EarnKaro and Amazon)
+      if (typeof expandRes.data === 'string') {
+        const metaRefreshMatch = expandRes.data.match(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^;]+;\s*url=([^"']+)["']?/i);
+        if (metaRefreshMatch && metaRefreshMatch[1]) {
+          let refreshUrl = metaRefreshMatch[1].replace(/&amp;/g, '&');
+          if (!refreshUrl.startsWith('http')) {
+            const urlObj = new URL(targetUrl);
+            refreshUrl = urlObj.origin + (refreshUrl.startsWith('/') ? '' : '/') + refreshUrl;
+          }
+          const nestedRes = await axios.get(refreshUrl, { maxRedirects: 5, validateStatus: () => true, headers: { 'User-Agent': getRandomUA() } });
+          targetUrl = nestedRes.request?.res?.responseUrl || refreshUrl;
+        } else {
+           // Try finding window.location.href or window.location.replace in JS
+           const jsRedirectMatch = expandRes.data.match(/window\.location\.(?:href|replace)\s*=\s*['"]([^'"]+)['"]/i);
+           if (jsRedirectMatch && jsRedirectMatch[1]) {
+             targetUrl = jsRedirectMatch[1].replace(/&amp;/g, '&');
+           }
+        }
+      }
     } catch (e) {
       console.error('Failed to expand shortlink:', link);
     }
