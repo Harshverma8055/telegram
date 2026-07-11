@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
 import { fetchTelegramDeals, fetchAmazonDetails, resolveDealUrl, fetchPageMetadata } from '@/lib/scrapers/rss';
-import { publishToTelegram, sanitizeTitle } from '@/lib/telegram';
+import { publishToTelegram, sanitizeTitle, bot } from '@/lib/telegram';
 import { getAffiliateUrl } from '@/lib/affiliate';
 
 const COMPETITOR_CHANNELS = [
@@ -80,6 +80,77 @@ export async function GET(request: Request) {
   }
 
   console.log('📡 Starting Vercel Cron: Deal Scraper...');
+  
+  // 1. PROCESS RECURRING/REPOST SCHEDULES
+  try {
+    const now = new Date();
+    const recurringPosts = await prisma.recurringPost.findMany({
+      where: { isActive: true }
+    });
+
+    for (const post of recurringPosts) {
+      const lastPosted = post.lastPostedAt ? new Date(post.lastPostedAt) : new Date(0);
+      const diffMs = now.getTime() - lastPosted.getTime();
+      const intervalMs = post.intervalMin * 60 * 1000;
+
+      if (diffMs >= intervalMs) {
+        console.log(`⏰ Reposting recurring post: "${post.title}"`);
+
+        let message = post.content;
+        let finalLink = post.link || '';
+
+        if (finalLink) {
+          const resolved = await resolveDealUrl(finalLink);
+          if (resolved) {
+            finalLink = getAffiliateUrl(resolved.platform, resolved.cleanUrl, resolved.externalId);
+          }
+        }
+
+        const channelId = TELEGRAM_CHANNEL;
+        let inlineKeyboard = undefined;
+
+        if (finalLink) {
+          const isTelegramLink = finalLink.toLowerCase().includes('t.me') || finalLink.toLowerCase().includes('telegram');
+          const buttonText = isTelegramLink ? '👉 Join Channel' : '🛍️ View / Buy Deal';
+          inlineKeyboard = {
+            inline_keyboard: [
+              [
+                {
+                  text: buttonText,
+                  url: finalLink
+                }
+              ]
+            ]
+          };
+        }
+
+        if (bot) {
+          if (post.imageUrl) {
+            await bot.sendPhoto(channelId, post.imageUrl, {
+              caption: message,
+              parse_mode: 'Markdown',
+              reply_markup: inlineKeyboard
+            });
+          } else {
+            await bot.sendMessage(channelId, message, {
+              parse_mode: 'Markdown',
+              reply_markup: inlineKeyboard
+            });
+          }
+        } else {
+          console.log(`[SIMULATION] Cron recurring post: ${message} (Link: ${finalLink})`);
+        }
+
+        await prisma.recurringPost.update({
+          where: { id: post.id },
+          data: { lastPostedAt: now }
+        });
+      }
+    }
+  } catch (recurringError) {
+    console.error('Error processing recurring posts in cron:', recurringError);
+  }
+
   const startTime = Date.now();
   const MAX_EXECUTION_TIME_MS = 8000; // 8 seconds limit for Vercel Free Tier (10s max)
   const MAX_NEW_DEALS_PER_RUN = 5; // Only process 5 new deals at a time

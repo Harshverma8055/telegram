@@ -26,6 +26,7 @@ import Header from '@/components/Header';
 import DealsView from '@/components/views/DealsView';
 import ScrapersView from '@/components/views/ScrapersView';
 import TelegramView from '@/components/views/TelegramView';
+import RecurringView from '@/components/views/RecurringView';
 import {
   mockDashboardStats,
   mockRevenueTimeline,
@@ -327,6 +328,8 @@ export default function App() {
         return <ScrapersView />;
       case 'telegram':
         return <TelegramView />;
+      case 'recurring':
+        return <RecurringView />;
       default:
         return (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -345,6 +348,7 @@ export default function App() {
       case 'price-drops': return 'Price Drops';
       case 'scrapers': return 'Scraper Engine';
       case 'telegram': return 'Telegram Automation';
+      case 'recurring': return 'Smart Recurring Reposter';
       default: return activeSection.charAt(0).toUpperCase() + activeSection.slice(1).replace('-', ' ');
     }
   };
@@ -355,6 +359,7 @@ export default function App() {
       case 'deals': return "Review, score, and publish the latest deals.";
       case 'scrapers': return "Monitor live bot performance across 24 platforms.";
       case 'telegram': return "Manage multi-channel auto-publishing.";
+      case 'recurring': return "Schedule and manage automated recurring repost campaigns.";
       default: return '';
     }
   };

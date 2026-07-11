@@ -102,3 +102,16 @@ model TelegramChannel {
   autoPublish   Boolean   @default(false)
   categories    String    // Stored as JSON string
 }
+
+model RecurringPost {
+  id           String    @id @default(uuid())
+  title        String
+  content      String
+  imageUrl     String?
+  link         String?
+  intervalMin  Int       // Interval in minutes (e.g. 60 = 1h, 1440 = 24h)
+  isActive     Boolean   @default(true)
+  lastPostedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

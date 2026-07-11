@@ -25,6 +25,7 @@ import {
   ChevronLeft,
   Menu,
   LogOut,
+  Clock,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -69,6 +70,7 @@ const navGroups: { title: string; items: NavItem[] }[] = [
     title: 'DISTRIBUTION',
     items: [
       { id: 'telegram', label: 'Telegram', icon: <Send size={18} />, badge: '1 channel' },
+      { id: 'recurring', label: 'Smart Reposter', icon: <Clock size={18} /> },
       { id: 'whatsapp', label: 'WhatsApp', icon: <MessageCircle size={18} /> },
       { id: 'content', label: 'Content AI', icon: <Bot size={18} /> },
       { id: 'images', label: 'Image Studio', icon: <ImageIcon size={18} /> },
