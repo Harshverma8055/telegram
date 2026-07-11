@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
-import { fetchTelegramDeals, fetchAmazonDetails, resolveDealUrl, fetchPageMetadata } from '@/lib/scrapers/rss';
+import { fetchTelegramDeals, fetchAmazonDetails, resolveDealUrl, fetchPageMetadata, scrapeAmazonDealsPage } from '@/lib/scrapers/rss';
 import { publishToTelegram, sanitizeTitle, bot } from '@/lib/telegram';
 import { getAffiliateUrl } from '@/lib/affiliate';
 
@@ -166,7 +166,51 @@ export async function GET(request: Request) {
       priorityScore: number;
     }> = [];
 
-    // Stage 1: Fast Scrape & De-duplicate
+    // Stage 1a: Direct Amazon Deals Page Scraper (Safe, official-source, no competitor copying)
+    try {
+      console.log('📡 Scraping Amazon Deals page for direct deals...');
+      const amazonDealsAsins = await scrapeAmazonDealsPage();
+      
+      const amazonPlatform = await prisma.platform.upsert({
+        where: { slug: 'amazon' },
+        update: {},
+        create: { name: 'Amazon', slug: 'amazon' }
+      });
+
+      for (const asin of amazonDealsAsins) {
+        // Skip if already in database
+        const existingDeal = await prisma.product.findUnique({
+          where: { platformId_externalId: { platformId: amazonPlatform.id, externalId: asin } }
+        });
+
+        if (existingDeal) {
+          continue;
+        }
+
+        // Avoid duplicates in the candidate list
+        if (candidates.some(c => c.dealInfo.externalId === asin && c.dealInfo.platform === 'amazon')) {
+          continue;
+        }
+
+        candidates.push({
+          dealInfo: {
+            platform: 'amazon',
+            cleanUrl: `https://www.amazon.in/dp/${asin}`,
+            externalId: asin
+          },
+          item: {
+            title: 'Amazon Goldbox Deal',
+            content: 'Direct deal from Amazon Today\'s Deals page'
+          },
+          // Direct deals from the official Deals page get a high base score!
+          priorityScore: 55 
+        });
+      }
+    } catch (amzDealsErr: any) {
+      console.error('Error scraping Amazon Deals page in cron:', amzDealsErr.message);
+    }
+
+    // Stage 1b: Fast Scrape & De-duplicate competitor channels
     const shuffledChannels = [...COMPETITOR_CHANNELS].sort(() => Math.random() - 0.5);
 
     for (const channel of shuffledChannels) {

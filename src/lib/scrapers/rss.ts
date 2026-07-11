@@ -659,3 +659,64 @@ export async function fetchPageMetadata(url: string) {
     return null;
   }
 }
+
+// Scrapes the public Amazon India deals pages to extract all active ASINs.
+// Uses regex to scan both href elements and raw HTML scripts (to bypass client-side rendering).
+export async function scrapeAmazonDealsPage(): Promise<string[]> {
+  try {
+    const urls = [
+      'https://www.amazon.in/deals',
+      'https://www.amazon.in/gp/goldbox',
+      'https://www.amazon.in/deals?ref_=nav_cs_gb'
+    ];
+    
+    const asinsSet = new Set<string>();
+    
+    for (const url of urls) {
+      try {
+        console.log(`📡 Fetching Amazon Deals page: ${url}`);
+        const response = await axios.get(url, {
+          headers: {
+            'User-Agent': getRandomUA(),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
+          timeout: 10000
+        });
+        
+        const $ = cheerio.load(response.data);
+        
+        // 1. Extract from href links
+        $('a').each((_, el) => {
+          const href = $(el).attr('href');
+          if (href) {
+            const asin = extractAmazonASIN(href);
+            if (asin) {
+              asinsSet.add(asin);
+            }
+          }
+        });
+        
+        // 2. Scan raw HTML body (grabs JS-rendered deal items in script/JSON blocks)
+        const asinRegex = /\b(B0[A-Z0-9]{8})\b/g;
+        let match;
+        while ((match = asinRegex.exec(response.data)) !== null) {
+          asinsSet.add(match[1].toUpperCase());
+        }
+      } catch (err: any) {
+        console.error(`Failed to fetch/parse Amazon deals page (${url}):`, err.message);
+      }
+    }
+    
+    const uniqueAsins = Array.from(asinsSet);
+    console.log(`🎯 Extracted ${uniqueAsins.length} unique Amazon ASINs directly from Deals pages.`);
+    return uniqueAsins;
+  } catch (e: any) {
+    console.error('Amazon deals page scraping failed:', e.message);
+    return [];
+  }
+}
+
