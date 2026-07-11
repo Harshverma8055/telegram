@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
-import { fetchTelegramDeals, extractAmazonASIN, fetchAmazonDetails, resolveASIN } from '@/lib/scrapers/rss';
+import { fetchTelegramDeals, fetchAmazonDetails, resolveDealUrl, fetchPageMetadata } from '@/lib/scrapers/rss';
 import { publishToTelegram, sanitizeTitle } from '@/lib/telegram';
+import { getAffiliateUrl } from '@/lib/affiliate';
 
 const COMPETITOR_CHANNELS = [
   'LootDealsIndia',
@@ -88,14 +89,8 @@ export async function GET(request: Request) {
     let dealsSkippedCount = 0;
     let timeLimitReached = false;
 
-    const platform = await prisma.platform.upsert({
-      where: { slug: 'amazon' },
-      update: {},
-      create: { name: 'Amazon', slug: 'amazon' }
-    });
-
     const candidates: Array<{
-      asin: string;
+      dealInfo: { platform: string; cleanUrl: string; externalId: string };
       item: any;
       priorityScore: number;
     }> = [];
@@ -104,8 +99,7 @@ export async function GET(request: Request) {
     const shuffledChannels = [...COMPETITOR_CHANNELS].sort(() => Math.random() - 0.5);
 
     for (const channel of shuffledChannels) {
-      // Check timeout to make sure we leave enough time for Stage 3 (Amazon fetching)
-      // Vercel limit is 10s. We set scrape phase time to 3.5s.
+      // Check timeout to make sure we leave enough time for Stage 3 (Amazon/Metadata fetching)
       if (Date.now() - startTime > 3500 || candidates.length >= 15) {
         break;
       }
@@ -117,12 +111,19 @@ export async function GET(request: Request) {
           break;
         }
 
-        const asin = await resolveASIN(item.link, item.content);
-        if (!asin) continue;
+        const dealInfo = await resolveDealUrl(item.link, item.content);
+        if (!dealInfo) continue;
+
+        // Find or create platform
+        const dealPlatform = await prisma.platform.upsert({
+          where: { slug: dealInfo.platform },
+          update: {},
+          create: { name: dealInfo.platform.charAt(0).toUpperCase() + dealInfo.platform.slice(1), slug: dealInfo.platform }
+        });
 
         // Skip if already in database
         const existingDeal = await prisma.product.findUnique({
-          where: { platformId_externalId: { platformId: platform.id, externalId: asin } }
+          where: { platformId_externalId: { platformId: dealPlatform.id, externalId: dealInfo.externalId } }
         });
 
         if (existingDeal) {
@@ -131,7 +132,7 @@ export async function GET(request: Request) {
         }
 
         // Avoid duplicate candidates in the same run
-        if (candidates.some(c => c.asin === asin)) {
+        if (candidates.some(c => c.dealInfo.externalId === dealInfo.externalId && c.dealInfo.platform === dealInfo.platform)) {
           continue;
         }
 
@@ -139,7 +140,7 @@ export async function GET(request: Request) {
         const priorityScore = calculatePriorityScore(titleText);
 
         candidates.push({
-          asin,
+          dealInfo,
           item,
           priorityScore
         });
@@ -161,13 +162,16 @@ export async function GET(request: Request) {
         break;
       }
 
-      const { asin, item } = candidate;
+      const { dealInfo, item } = candidate;
 
-      // Generate affiliate link (ALWAYS use our own tag, never competitor's)
-      const affiliateTag = process.env.AMAZON_AFFILIATE_TAG || '';
-      const affiliateUrl = affiliateTag 
-        ? `https://www.amazon.in/dp/${asin}?tag=${affiliateTag}` 
-        : `https://www.amazon.in/dp/${asin}`;
+      const dealPlatform = await prisma.platform.upsert({
+        where: { slug: dealInfo.platform },
+        update: {},
+        create: { name: dealInfo.platform.charAt(0).toUpperCase() + dealInfo.platform.slice(1), slug: dealInfo.platform }
+      });
+
+      // Generate the affiliate link using the unified wrapper
+      const affiliateUrl = getAffiliateUrl(dealInfo.platform, dealInfo.cleanUrl, dealInfo.externalId);
 
       let finalTitle = '';
       let finalDealPrice = 0;
@@ -175,38 +179,47 @@ export async function GET(request: Request) {
       let finalImageUrl = item.imageUrl || '';
       let priceVerified = false;
 
-      // STEP 1: Try Amazon direct fetch
-      const amzData = await fetchAmazonDetails(asin);
-      
-      if (amzData && amzData.title) {
-        finalTitle = amzData.title;
-        if (amzData.imageUrl) finalImageUrl = amzData.imageUrl;
+      if (dealInfo.platform === 'amazon') {
+        // Direct Amazon Scraping
+        const amzData = await fetchAmazonDetails(dealInfo.externalId);
         
-        if (amzData.currentPrice > 0) {
-          finalDealPrice = amzData.currentPrice;
-          finalOriginalPrice = amzData.originalPrice;
-          priceVerified = true;
-          console.log(`✅ VERIFIED: ${asin} → "${finalTitle.substring(0, 40)}" ₹${finalDealPrice} (MRP: ₹${finalOriginalPrice})`);
+        if (amzData && amzData.title) {
+          finalTitle = amzData.title;
+          if (amzData.imageUrl) finalImageUrl = amzData.imageUrl;
+          
+          if (amzData.currentPrice > 0) {
+            finalDealPrice = amzData.currentPrice;
+            finalOriginalPrice = amzData.originalPrice;
+            priceVerified = true;
+            console.log(`✅ VERIFIED: ${dealInfo.externalId} → "${finalTitle.substring(0, 40)}" ₹${finalDealPrice} (MRP: ₹${finalOriginalPrice})`);
+          }
+        }
+      } else {
+        // Flipkart / Myntra / Ajio Metadata Scraping
+        const metaData = await fetchPageMetadata(dealInfo.cleanUrl);
+        if (metaData && metaData.title) {
+          finalTitle = metaData.title;
+          if (metaData.imageUrl) finalImageUrl = metaData.imageUrl;
         }
       }
 
-      // STEP 2: If Amazon didn't give us a title, use Telegram link preview
+      // Fallback 1: Use Telegram link preview title
       if (!finalTitle && item.previewTitle) {
         finalTitle = item.previewTitle;
         console.log(`📋 Title from Telegram preview: ${finalTitle.substring(0, 50)}...`);
       }
 
-      // STEP 3: Last resort for title only
+      // Fallback 2: Last resort — cleaned Telegram text title
       if (!finalTitle) {
         finalTitle = item.title;
         console.log(`⚠️ Title from Telegram text: ${finalTitle.substring(0, 50)}...`);
       }
 
-      // STEP 4: If price is NOT verified, post without price
+      // If price is NOT verified, post without price
       if (!priceVerified) {
         finalDealPrice = 0;
         finalOriginalPrice = 0;
-        console.log(`⚠️ UNVERIFIED PRICE for ${asin} — will post without price to maintain trust`);
+        console.log(`⚠️ UNVERIFIED PRICE for ${dealInfo.externalId} — will post without price to maintain trust`);
       }
 
       const discountPct = (priceVerified && finalOriginalPrice > finalDealPrice) 
@@ -218,10 +231,10 @@ export async function GET(request: Request) {
       // Save product
       const product = await prisma.product.create({
         data: {
-          platformId: platform.id,
-          externalId: asin,
+          platformId: dealPlatform.id,
+          externalId: dealInfo.externalId,
           title: sanitizeTitle(finalTitle),
-          url: `https://www.amazon.in/dp/${asin}`,
+          url: dealInfo.cleanUrl,
           currentPrice: finalDealPrice, 
           imageUrl: finalImageUrl,
         }
@@ -231,7 +244,7 @@ export async function GET(request: Request) {
       const deal = await prisma.deal.create({
         data: {
           productId: product.id,
-          platformId: platform.id,
+          platformId: dealPlatform.id,
           dealType: 'price_drop',
           dealScore: priceVerified ? 95 : 70,
           dealPrice: finalDealPrice, 

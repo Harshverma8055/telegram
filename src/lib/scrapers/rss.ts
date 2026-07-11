@@ -391,3 +391,130 @@ function parsePrice(text: string): number {
   const parsed = parseFloat(clean);
   return isNaN(parsed) ? 0 : Math.round(parsed);
 }
+
+// Universal shortlink expander and platform resolver
+export async function resolveDealUrl(link: string, content: string = ''): Promise<{ platform: string; cleanUrl: string; externalId: string } | null> {
+  const combinedText = (link + ' ' + content).trim();
+  
+  // 1. First, check if there is an Amazon ASIN in the link or text
+  const amazonAsin = extractAmazonASIN(combinedText);
+  if (amazonAsin) {
+    return {
+      platform: 'amazon',
+      cleanUrl: `https://www.amazon.in/dp/${amazonAsin}`,
+      externalId: amazonAsin
+    };
+  }
+
+  // 2. Expand shortlink if needed
+  let targetUrl = link;
+  const isShortlink = 
+    link.includes('amzn.to') || link.includes('grbn.in') || link.includes('amazn.lt') || link.includes('link.amazon') ||
+    link.includes('bitly.in') || link.includes('bitiy.in') || link.includes('amazn.to') ||
+    link.includes('fkrt.co') || link.includes('fkrt.cc') || link.includes('fktr.in') ||
+    link.includes('myntr.in') || link.includes('ajio.co') || link.includes('bit.ly') || link.includes('tinyurl.com');
+
+  if (isShortlink) {
+    try {
+      const expandRes = await fetch(link, { redirect: 'follow' });
+      targetUrl = expandRes.url;
+    } catch (e) {
+      console.error('Failed to expand shortlink:', link);
+    }
+  }
+
+  // 3. Resolve platform from the clean URL
+  const lowerUrl = targetUrl.toLowerCase();
+
+  // Double check Amazon after redirect
+  if (lowerUrl.includes('amazon.in') || lowerUrl.includes('amazon.com')) {
+    const asin = extractAmazonASIN(targetUrl);
+    if (asin) {
+      return {
+        platform: 'amazon',
+        cleanUrl: `https://www.amazon.in/dp/${asin}`,
+        externalId: asin
+      };
+    }
+  }
+
+  if (lowerUrl.includes('flipkart.com') || lowerUrl.includes('fkrt.co') || lowerUrl.includes('fkrt.cc')) {
+    try {
+      const urlObj = new URL(targetUrl);
+      const pid = urlObj.searchParams.get('pid');
+      const cleanUrl = urlObj.origin + urlObj.pathname + (pid ? `?pid=${pid}` : '');
+      const externalId = pid || urlObj.pathname.split('/').pop() || 'fk-product';
+      return {
+        platform: 'flipkart',
+        cleanUrl,
+        externalId
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  if (lowerUrl.includes('myntra.com') || lowerUrl.includes('myntr.in')) {
+    try {
+      const urlObj = new URL(targetUrl);
+      const cleanUrl = urlObj.origin + urlObj.pathname;
+      const externalId = urlObj.pathname.split('/').pop() || 'myntra-product';
+      return {
+        platform: 'myntra',
+        cleanUrl,
+        externalId
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  if (lowerUrl.includes('ajio.com') || lowerUrl.includes('ajio.co')) {
+    try {
+      const urlObj = new URL(targetUrl);
+      const cleanUrl = urlObj.origin + urlObj.pathname;
+      const externalId = urlObj.pathname.split('/').pop() || 'ajio-product';
+      return {
+        platform: 'ajio',
+        cleanUrl,
+        externalId
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+// Scrapes OpenGraph tags by posing as a Discord preview bot (extremely reliable, captcha-free)
+export async function fetchPageMetadata(url: string) {
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
+      },
+      timeout: 8000
+    });
+    const $ = cheerio.load(response.data);
+    
+    const title = $('meta[property="og:title"]').attr('content') || 
+                  $('meta[name="twitter:title"]').attr('content') || 
+                  $('title').text() || '';
+                  
+    const imageUrl = $('meta[property="og:image"]').attr('content') || 
+                      $('meta[name="twitter:image"]').attr('content') || '';
+    
+    return {
+      title: title.trim(),
+      imageUrl: imageUrl.trim(),
+      currentPrice: 0,
+      originalPrice: 0
+    };
+  } catch (e) {
+    console.error('Failed to scrape metadata for:', url);
+    return null;
+  }
+}

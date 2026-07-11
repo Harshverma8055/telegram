@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
-import { fetchTelegramDeals, extractAmazonASIN, resolveASIN } from './src/lib/scrapers/rss';
+import { fetchTelegramDeals, resolveDealUrl } from './src/lib/scrapers/rss';
 import { publishToTelegram, sanitizeTitle } from './src/lib/telegram';
+import { getAffiliateUrl } from './src/lib/affiliate';
 
 const prisma = new PrismaClient();
 
@@ -85,34 +86,34 @@ async function runAutomationCycle() {
       console.log(`Found ${deals.length} recent posts.`);
 
       for (const item of deals) {
-        // Use the global resolver to expand shortlinks and extract the ASIN
-        const asin = await resolveASIN(item.link, item.content);
+        // Use the global resolver to expand shortlinks and detect the platform
+        const dealInfo = await resolveDealUrl(item.link, item.content);
         
-        if (!asin) continue; // Skip if it's not an Amazon deal
+        if (!dealInfo) continue; // Skip if it's not a recognized platform deal
 
-        // Check if we already processed this deal recently to avoid spam
-        const platform = await prisma.platform.upsert({
-          where: { slug: 'amazon' },
+        // Find or create the platform (e.g. Amazon, Flipkart, Myntra, Ajio)
+        const platformObj = await prisma.platform.upsert({
+          where: { slug: dealInfo.platform },
           update: {},
-          create: { name: 'Amazon', slug: 'amazon' }
+          create: { 
+            name: dealInfo.platform.charAt(0).toUpperCase() + dealInfo.platform.slice(1), 
+            slug: dealInfo.platform 
+          }
         });
 
         const existingDeal = await prisma.product.findUnique({
-          where: { platformId_externalId: { platformId: platform.id, externalId: asin } }
+          where: { platformId_externalId: { platformId: platformObj.id, externalId: dealInfo.externalId } }
         });
 
         if (existingDeal) {
           continue; // We already posted this!
         }
 
-        console.log(`\n💎 New Amazon Deal Found! ASIN: ${asin}`);
+        console.log(`\n💎 New ${dealInfo.platform.toUpperCase()} Deal Found! ID: ${dealInfo.externalId}`);
         console.log(`Title: ${item.title}`);
 
-        // Generate the affiliate link using your tag from .env
-        const affiliateTag = process.env.AMAZON_AFFILIATE_TAG || '';
-        const affiliateUrl = affiliateTag 
-          ? `https://www.amazon.in/dp/${asin}?tag=${affiliateTag}` 
-          : `https://www.amazon.in/dp/${asin}`;
+        // Generate the affiliate link using your mapping from .env
+        const affiliateUrl = getAffiliateUrl(dealInfo.platform, dealInfo.cleanUrl, dealInfo.externalId);
 
         const titleText = item.title || item.previewTitle || '';
         const priorityAdjustment = calculatePriorityScore(titleText);
@@ -121,10 +122,10 @@ async function runAutomationCycle() {
         // Save to Database (sanitize title first)
         const product = await prisma.product.create({
           data: {
-            platformId: platform.id,
-            externalId: asin,
+            platformId: platformObj.id,
+            externalId: dealInfo.externalId,
             title: sanitizeTitle(item.title),
-            url: `https://www.amazon.in/dp/${asin}`,
+            url: dealInfo.cleanUrl,
             currentPrice: 0, // Price is unknown via RSS, but they click the link to see it!
             imageUrl: item.imageUrl,
           }
@@ -133,7 +134,7 @@ async function runAutomationCycle() {
         const deal = await prisma.deal.create({
           data: {
             productId: product.id,
-            platformId: platform.id,
+            platformId: platformObj.id,
             dealType: 'price_drop',
             dealScore: dealScore, 
             dealPrice: 0, 
@@ -149,7 +150,7 @@ async function runAutomationCycle() {
         
         /* 
         // If you want to turn full 100% auto-pilot back on, uncomment this block:
-        console.log(`🚀 Triggering Auto-Publish Pipeline for ASIN: ${asin}`);
+        console.log(`🚀 Triggering Auto-Publish Pipeline for ID: ${dealInfo.externalId}`);
         try {
           await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
           console.log(`✅ Auto-Published to Telegram: ${TELEGRAM_CHANNEL}`);
