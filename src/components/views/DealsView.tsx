@@ -38,6 +38,115 @@ export default function DealsView() {
   const [externalId, setExternalId] = useState('');
   const [cleanUrl, setCleanUrl] = useState('');
 
+
+  // Helper to parse pasted Telegram deal posts
+  const parseTelegramPostText = (text: string) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    // 1. Extract link
+    const urlRegex = /https?:\/\/[^\s"'`<>]+/gi;
+    const urls = text.match(urlRegex) || [];
+    const link = urls.find(url => {
+      const l = url.toLowerCase();
+      return l.includes('amazon') || l.includes('amzn') || l.includes('flipkart') || l.includes('fkrt') || l.includes('myntra') || l.includes('ajio') || l.includes('ekaro') || l.includes('extrape');
+    }) || urls[0] || '';
+
+    // 2. Extract MRP
+    let mrp = 0;
+    const mrpRegexes = [
+      /(?:mrp|original|list\s*price|retail\s*price|actual\s*price)\s*(?::|-|Rs\.?|₹)?\s*([\d,]+)/i,
+      /~~([\d,]+)~~/
+    ];
+    for (const regex of mrpRegexes) {
+      const match = text.match(regex);
+      if (match) {
+        mrp = Math.round(parseFloat(match[1].replace(/,/g, '')));
+        break;
+      }
+    }
+
+    // 3. Extract Deal Price
+    let price = 0;
+    const priceRegexes = [
+      /(?:deal|offer|selling|effective|sale|promo|special)?\s*price\s*(?::|-|Rs\.?|₹)?\s*([\d,]+)/i,
+      /(?:buy\s*at|grab\s*for|loot\s*at|effective\s*at)\s*(?::|-|Rs\.?|₹)?\s*([\d,]+)/i,
+      /(?:Rs\.?|₹)\s*([\d,]+)/i
+    ];
+    for (const regex of priceRegexes) {
+      const match = text.match(regex);
+      if (match) {
+        const parsed = Math.round(parseFloat(match[1].replace(/,/g, '')));
+        if (parsed !== mrp || price === 0) {
+          price = parsed;
+          if (price !== mrp) break;
+        }
+      }
+    }
+
+    // 4. Extract Title
+    let title = '';
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (lower.includes('http') || lower.includes('www') || lower.includes('://')) continue;
+      if (lower.includes('mrp') || lower.includes('price') || lower.includes('off') || lower.includes('%')) continue;
+      if (line.replace(/[^\d]/g, '').length > 4) continue;
+      
+      title = line.replace(/^[\s\p{Emoji}\u2700-\u27BF\uE000-\uF8FF\uD83C[\uDF00-\uDFFF]\uD83D[\uDC00-\uDDFF]\uD83E[\uDD00-\uDFFF]]+/gu, '').trim();
+      if (title.length > 5) break;
+    }
+
+    if (!title && lines.length > 0) {
+      title = lines[0].replace(/^[\s\p{Emoji}]+/gu, '').trim();
+    }
+
+    return { title, mrp, price, link };
+  };
+
+  const handleImportInputChange = async (value: string) => {
+    setImportLink(value);
+    
+    // Detect if they pasted a Telegram post or multiline text
+    if (value.includes('\n') || (value.length > 50 && !value.startsWith('http'))) {
+      const parsed = parseTelegramPostText(value);
+      if (parsed.link) {
+        // Prefill state fields instantly from text
+        setImportLink(parsed.link);
+        setTitle(parsed.title);
+        setDealPrice(parsed.price);
+        setOriginalPrice(parsed.mrp);
+        setFetchedDeal({ title: parsed.title, currentPrice: parsed.price, originalPrice: parsed.mrp });
+        
+        // Resolve target shortlink and fetch image in the background
+        setFetching(true);
+        try {
+          const res = await fetch('/api/deals/auto-import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ link: parsed.link })
+          });
+          const data = await res.json();
+          if (!data.error) {
+            if (data.imageUrl) setImageUrl(data.imageUrl);
+            if (data.cleanUrl) setCleanUrl(data.cleanUrl);
+            if (data.platform) setPlatform(data.platform);
+            if (data.externalId) setExternalId(data.externalId);
+            
+            // Fallback updates
+            if (!parsed.title && data.title) setTitle(data.title);
+            if (!parsed.price && data.currentPrice) setDealPrice(data.currentPrice);
+            if (!parsed.mrp && data.originalPrice) setOriginalPrice(data.originalPrice);
+            
+            setFetchedDeal(data);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setFetching(false);
+        }
+      }
+    }
+  };
+
   const fetchDeals = async () => {
     try {
       const res = await fetch('/api/deals');
@@ -181,22 +290,25 @@ export default function DealsView() {
         
         <div style={{ display: 'flex', gap: '12px' }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px',
+            display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 16px',
             background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-primary)', borderRadius: '12px', flex: 1
           }}>
-            <LinkIcon size={18} color="var(--text-muted)" />
-            <input
-              type="text"
-              placeholder="Paste product or affiliate URL here..."
+            <LinkIcon size={18} color="var(--text-muted)" style={{ marginTop: '3px' }} />
+            <textarea
+              placeholder="Paste product link OR paste the entire Telegram post text here to auto-fill details instantly..."
               value={importLink}
-              onChange={(e) => setImportLink(e.target.value)}
+              onChange={(e) => handleImportInputChange(e.target.value)}
+              rows={2}
               style={{
                 background: 'transparent',
                 border: 'none',
                 outline: 'none',
                 color: 'white',
                 fontSize: '14px',
-                width: '100%'
+                width: '100%',
+                resize: 'vertical',
+                minHeight: '44px',
+                fontFamily: 'inherit'
               }}
             />
           </div>
