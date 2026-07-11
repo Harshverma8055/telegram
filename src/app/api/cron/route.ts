@@ -166,6 +166,116 @@ export async function GET(request: Request) {
       priorityScore: number;
     }> = [];
 
+    // Stage 0: Watchlist Price Drop Checker (Professional, future-proof, 100% original)
+    try {
+      console.log('📡 Checking watchlisted products for price drops...');
+      const watchedProducts = await prisma.product.findMany({
+        where: { category: 'watchlist' },
+        include: { platform: true }
+      });
+
+      for (const prod of watchedProducts) {
+        // Limit processing inside cron to keep it under execution limit
+        if (Date.now() - startTime > 3000) break;
+
+        let latestPrice = 0;
+        let originalPrice = prod.mrp || 0;
+        let latestTitle = prod.title;
+        let latestImage = prod.imageUrl;
+
+        if (prod.platform.slug === 'amazon') {
+          const details = await fetchAmazonDetails(prod.externalId);
+          if (details) {
+            latestPrice = details.currentPrice;
+            originalPrice = details.originalPrice || details.currentPrice;
+            latestTitle = details.title;
+            latestImage = details.imageUrl;
+          }
+        } else {
+          // Scraping non-Amazon watchlisted product
+          try {
+            const response = await fetch(prod.url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)'
+              }
+            });
+            const html = await response.text();
+            const cheerio = require('cheerio');
+            const $ = cheerio.load(html);
+            
+            // Try parsing price from HTML
+            const priceRegex = /(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/i;
+            $('span, div, p').each((_: number, el: any) => {
+              const text = $(el).text().trim();
+              if (text.includes('₹') || text.includes('Rs.')) {
+                const match = text.match(priceRegex);
+                if (match && latestPrice === 0) {
+                  latestPrice = parseFloat(match[1].replace(/,/g, ''));
+                }
+              }
+            });
+          } catch (e) {
+            console.error(`Failed to scrape watchlist details for ${prod.externalId}:`, e);
+          }
+        }
+
+        if (latestPrice > 0) {
+          const previousPrice = prod.currentPrice || latestPrice;
+          
+          // Save price history if price changed
+          if (latestPrice !== previousPrice) {
+            await prisma.priceHistory.create({
+              data: {
+                productId: prod.id,
+                price: latestPrice
+              }
+            });
+            
+            // Update current price on product
+            await prisma.product.update({
+              where: { id: prod.id },
+              data: {
+                currentPrice: latestPrice,
+                mrp: originalPrice,
+                title: latestTitle,
+                imageUrl: latestImage,
+                lastScrapedAt: new Date()
+              }
+            });
+          }
+
+          // Check if price dropped significantly! (e.g. drop of 5% or more compared to previousPrice or MRP)
+          const dropFromPrevious = previousPrice - latestPrice;
+          const dropFromMRP = originalPrice - latestPrice;
+          
+          if (dropFromPrevious > 0 || (dropFromMRP / originalPrice) >= 0.1) {
+            console.log(`🔥 WATCHLIST PRICE DROP DETECTED for "${prod.title}": ₹${previousPrice} -> ₹${latestPrice}`);
+            
+            // Add as high-priority candidate!
+            candidates.push({
+              dealInfo: {
+                platform: prod.platform.slug,
+                cleanUrl: prod.url,
+                externalId: prod.externalId
+              },
+              item: {
+                title: latestTitle,
+                content: `Price drop alert! Was ₹${previousPrice}, now only ₹${latestPrice}!`,
+                customPrice: latestPrice,
+                customOriginalPrice: originalPrice,
+                imageUrl: latestImage,
+                priceVerified: true
+              },
+              // Price drop watchlists are the highest priority deals
+              priorityScore: 99
+            });
+          }
+        }
+      }
+    } catch (watchlistErr: any) {
+      console.error('Error checking watchlist in cron:', watchlistErr.message);
+    }
+
     // Stage 1a: Direct Amazon Deals Page Scraper (Safe, official-source, no competitor copying)
     try {
       console.log('📡 Scraping Amazon Deals page for direct deals...');
@@ -292,7 +402,15 @@ export async function GET(request: Request) {
       let finalImageUrl = '';
       let priceVerified = false;
 
-      if (dealInfo.platform === 'amazon') {
+      if (candidate.item.priceVerified) {
+        // Reuse already-fetched data from watchlist
+        finalTitle = candidate.item.title || '';
+        finalDealPrice = candidate.item.customPrice || 0;
+        finalOriginalPrice = candidate.item.customOriginalPrice || 0;
+        finalImageUrl = candidate.item.imageUrl || '';
+        priceVerified = true;
+        console.log(`✅ WATCHLIST PRICE DROP VERIFIED: ${dealInfo.externalId} → "${finalTitle.substring(0, 40)}" ₹${finalDealPrice}`);
+      } else if (dealInfo.platform === 'amazon') {
         // ✅ AMAZON: Use the Discord-bot scraper to get real Amazon data
         const amzData = await fetchAmazonDetails(dealInfo.externalId);
         

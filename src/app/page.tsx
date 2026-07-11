@@ -27,6 +27,7 @@ import DealsView from '@/components/views/DealsView';
 import ScrapersView from '@/components/views/ScrapersView';
 import TelegramView from '@/components/views/TelegramView';
 import RecurringView from '@/components/views/RecurringView';
+import WatchlistView from '@/components/views/WatchlistView';
 import {
   mockDashboardStats,
   mockRevenueTimeline,
@@ -322,8 +323,9 @@ export default function App() {
         return <DashboardView />;
       case 'deals':
       case 'flash-sales':
-      case 'price-drops':
         return <DealsView />;
+      case 'price-drops':
+        return <WatchlistView />;
       case 'scrapers':
         return <ScrapersView />;
       case 'telegram':
@@ -345,7 +347,7 @@ export default function App() {
       case 'dashboard': return 'Dashboard';
       case 'deals': return 'Deal Engine';
       case 'flash-sales': return 'Flash Sales';
-      case 'price-drops': return 'Price Drops';
+      case 'price-drops': return 'Price Tracker Watchlist';
       case 'scrapers': return 'Scraper Engine';
       case 'telegram': return 'Telegram Automation';
       case 'recurring': return 'Smart Recurring Reposter';
@@ -360,6 +362,7 @@ export default function App() {
       case 'scrapers': return "Monitor live bot performance across 24 platforms.";
       case 'telegram': return "Manage multi-channel auto-publishing.";
       case 'recurring': return "Schedule and manage automated recurring repost campaigns.";
+      case 'price-drops': return 'Add specific products to track their prices hourly and alert your Telegram channel on drops.';
       default: return '';
     }
   };
