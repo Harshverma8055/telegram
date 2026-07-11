@@ -246,7 +246,7 @@ export default function DealsView() {
           externalId,
           customAffiliateUrl
         })
-      });     });
+      });
       
       const data = await res.json();
       if (data.error) {

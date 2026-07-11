@@ -67,7 +67,15 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
                lower.includes('link.amazon') ||
                lower.includes('bitly.in') ||
                lower.includes('bitiy.in') ||
-               lower.includes('amazn.to');
+               lower.includes('amazn.to') ||
+               lower.includes('flipkart.com') ||
+               lower.includes('fkrt.co') ||
+               lower.includes('fkrt.cc') ||
+               lower.includes('fktr.in') ||
+               lower.includes('linksredirect.in') ||
+               lower.includes('myntra.com') ||
+               lower.includes('myntr.in') ||
+               lower.includes('ajio.com');
       }) || '';
 
       if (amzLink) {
@@ -411,8 +419,8 @@ export function tryResolvePlatformDirectly(url: string): { platform: string; cle
     }
   }
   
-  // 2. Flipkart check
-  if (lowerUrl.includes('flipkart.com') || lowerUrl.includes('fkrt.co') || lowerUrl.includes('fkrt.cc')) {
+  // 2. Flipkart check (includes all known shortlink domains)
+  if (lowerUrl.includes('flipkart.com') || lowerUrl.includes('fkrt.co') || lowerUrl.includes('fkrt.cc') || lowerUrl.includes('fktr.in') || lowerUrl.includes('linksredirect.in')) {
     try {
       const urlObj = new URL(url);
       const pid = urlObj.searchParams.get('pid');
@@ -461,7 +469,7 @@ export function tryResolvePlatformDirectly(url: string): { platform: string; cle
 
 // Scans text for any platform-specific URLs
 export function findPlatformUrlInText(text: string): string | null {
-  const regex = /https?:\/\/[^\s"'`<>]*?(?:amazon\.in|amazon\.com|flipkart\.com|myntra\.com|ajio\.com)[^\s"'`<>]*/gi;
+  const regex = /https?:\/\/[^\s"'`<>]*?(?:amazon\.in|amazon\.com|flipkart\.com|fkrt\.co|fkrt\.cc|myntra\.com|ajio\.com)[^\s"'`<>]*/gi;
   const match = text.match(regex);
   if (match && match.length > 0) {
     return match[0].replace(/&amp;/g, '&');
@@ -483,7 +491,20 @@ export async function resolveDealUrl(link: string, content: string = ''): Promis
     };
   }
 
-  // 2. Multi-hop redirect resolver
+  // 1b. Check if the link itself contains an embedded platform URL in query params
+  // (Common for EarnKaro, ExtraPe, and other affiliate wrappers)
+  try {
+    const urlObj = new URL(link.trim());
+    for (const [, value] of urlObj.searchParams) {
+      const decoded = decodeURIComponent(value);
+      const embedded = tryResolvePlatformDirectly(decoded);
+      if (embedded) {
+        return embedded;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Multi-hop redirect resolver (manual, intercepts each hop)
   let targetUrl = link.trim();
   const visited = new Set<string>();
   
@@ -532,17 +553,27 @@ export async function resolveDealUrl(link: string, content: string = ''): Promis
           continue;
         }
         
-        // JS redirect check
-        const jsRedirectMatch = response.data.match(/window\.location\.(?:href|replace)\s*=\s*['"]([^'"]+)['"]/i);
-        if (jsRedirectMatch && jsRedirectMatch[1]) {
-          let refreshUrl = jsRedirectMatch[1].replace(/&amp;/g, '&');
-          if (!refreshUrl.startsWith('http')) {
-            const urlObj = new URL(targetUrl);
-            refreshUrl = urlObj.origin + (refreshUrl.startsWith('/') ? '' : '/') + refreshUrl;
+        // JS redirect check (multiple patterns)
+        const jsPatterns = [
+          /window\.location\.(?:href|replace)\s*=\s*['"]([^'"]+)['"]/i,
+          /window\.location\s*=\s*['"]([^'"]+)['"]/i,
+          /location\.href\s*=\s*['"]([^'"]+)['"]/i,
+        ];
+        let jsFound = false;
+        for (const pat of jsPatterns) {
+          const jsMatch = response.data.match(pat);
+          if (jsMatch && jsMatch[1]) {
+            let refreshUrl = jsMatch[1].replace(/&amp;/g, '&');
+            if (!refreshUrl.startsWith('http')) {
+              const urlObj = new URL(targetUrl);
+              refreshUrl = urlObj.origin + (refreshUrl.startsWith('/') ? '' : '/') + refreshUrl;
+            }
+            targetUrl = refreshUrl;
+            jsFound = true;
+            break;
           }
-          targetUrl = refreshUrl;
-          continue;
         }
+        if (jsFound) continue;
         
         // Scan HTML text body for direct platform URLs
         const foundPlatformUrl = findPlatformUrlInText(response.data);
@@ -559,7 +590,42 @@ export async function resolveDealUrl(link: string, content: string = ''): Promis
     }
   }
   
-  return tryResolvePlatformDirectly(targetUrl);
+  // 2b. Check the last resolved URL
+  const finalCheck = tryResolvePlatformDirectly(targetUrl);
+  if (finalCheck) return finalCheck;
+
+  // 3. FALLBACK: Let axios follow ALL redirects automatically (catches fktr.in, linksredirect.in, etc.)
+  try {
+    const autoResponse = await axios.get(link.trim(), {
+      maxRedirects: 10,
+      validateStatus: (status) => status >= 200 && status < 400,
+      headers: {
+        'User-Agent': getRandomUA(),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      },
+      timeout: 10000
+    });
+    
+    // Check the final URL after all redirects
+    const finalUrl = autoResponse.request?.res?.responseUrl || autoResponse.config?.url || '';
+    if (finalUrl) {
+      const autoResolved = tryResolvePlatformDirectly(finalUrl);
+      if (autoResolved) return autoResolved;
+    }
+
+    // Also scan the response body for platform URLs
+    if (typeof autoResponse.data === 'string') {
+      const foundUrl = findPlatformUrlInText(autoResponse.data);
+      if (foundUrl) {
+        const fromBody = tryResolvePlatformDirectly(foundUrl);
+        if (fromBody) return fromBody;
+      }
+    }
+  } catch (err: any) {
+    console.error(`Fallback auto-redirect failed for ${link}:`, err.message);
+  }
+
+  return null;
 }
 
 // Scrapes OpenGraph tags by posing as a Discord preview bot (extremely reliable, captcha-free)
