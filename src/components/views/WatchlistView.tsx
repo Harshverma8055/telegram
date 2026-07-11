@@ -20,7 +20,29 @@ export default function WatchlistView() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const handlePrepopulate = async () => {
+    try {
+      setSeeding(true);
+      setMessage(null);
+      const res = await fetch('/api/watchlist', {
+        method: 'PUT'
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMessage({ type: 'success', text: `Successfully imported ${data.count} high-commission student products into your Watchlist!` });
+        fetchProducts();
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to populate watchlist' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Error occurred while contacting server' });
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   // Fetch watchlist products on mount
   useEffect(() => {
@@ -208,6 +230,38 @@ export default function WatchlistView() {
             )}
           </button>
         </form>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '12px' }}>
+          <button
+            type="button"
+            onClick={handlePrepopulate}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 500,
+              background: 'rgba(255,255,255,0.05)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-primary)',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+            disabled={seeding || adding}
+          >
+            {seeding ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Seeding Essentials...
+              </>
+            ) : (
+              <>
+                🎒 Pre-populate 25+ Student & Hostel Essentials (High Commission)
+              </>
+            )}
+          </button>
+        </div>
 
         {message && (
           <div style={{ 
