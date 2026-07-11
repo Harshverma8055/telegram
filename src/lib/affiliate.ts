@@ -21,10 +21,10 @@ export function getAffiliateUrl(platform: string, originalUrl: string, externalI
   }
 
   if (provider === 'earnkaro') {
-    const sharedById = process.env.EARNKARO_SHARED_BY_ID || '';
-    if (!sharedById) return originalUrl;
-    // EarnKaro Link wrap format
-    return `https://earnkaro.com/convert?url=${encodeURIComponent(originalUrl)}&sharedby=${sharedById}`;
+    // SECURITY FIX: earnkaro.com/convert does NOT work for buyers (returns 404).
+    // To prevent the bot from posting broken links and ruining trust, we fallback to the clean url.
+    console.warn('WARNING: Automatic EarnKaro generation is disabled (causes 404 errors). Returning clean URL instead.');
+    return originalUrl;
   }
 
   return originalUrl;
