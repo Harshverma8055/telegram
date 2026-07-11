@@ -49,6 +49,8 @@ export async function GET(request: Request) {
       bankOffer: deal.bankOffer,
       isGenuine: deal.isGenuine,
       isPublished: deal.isPublished,
+      url: deal.product.url,
+      affiliateUrl: deal.affiliateUrl,
       clicks: deal.clicks,
       conversions: deal.conversions,
       revenue: deal.revenue,

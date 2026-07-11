@@ -1,0 +1,33 @@
+
+> dealflow-ai@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.2.10 (webpack)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.3s
+  Running TypeScript ...
+  Finished TypeScript in 2.4s ...
+  Collecting page data using 10 workers ...
+  Generating static pages using 10 workers (0/7) ...
+  Generating static pages using 10 workers (1/7) 
+  Generating static pages using 10 workers (3/7) 
+  Generating static pages using 10 workers (5/7) 
+✓ Generating static pages using 10 workers (7/7) in 383ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/cron
+├ ƒ /api/deals
+├ ƒ /api/deals/manual
+├ ƒ /api/scrapers/test
+└ ƒ /api/telegram/publish
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
