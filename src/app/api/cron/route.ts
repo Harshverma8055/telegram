@@ -223,7 +223,7 @@ export async function GET(request: Request) {
     // Stage 2: Sort Candidates by Priority Score
     candidates.sort((a, b) => b.priorityScore - a.priorityScore);
 
-    // Stage 3: Process the best deals (up to MAX_NEW_DEALS_PER_RUN)
+    // Stage 3: Process the best deals — ALWAYS fetch fresh data from the SOURCE, never trust competitor text
     const topCandidates = candidates.slice(0, MAX_NEW_DEALS_PER_RUN);
 
     for (const candidate of topCandidates) {
@@ -233,7 +233,64 @@ export async function GET(request: Request) {
         break;
       }
 
-      const { dealInfo, item } = candidate;
+      const { dealInfo } = candidate;
+
+      // =====================================================================
+      // TRUST RULE: IGNORE all competitor text. Only use the extracted LINK.
+      // Fetch ALL product details fresh from the actual e-commerce platform.
+      // This is the same process as when Gabbar manually pastes a link
+      // in the dashboard — guaranteed accurate data every time.
+      // =====================================================================
+
+      let finalTitle = '';
+      let finalDealPrice = 0;
+      let finalOriginalPrice = 0;
+      let finalImageUrl = '';
+      let priceVerified = false;
+
+      if (dealInfo.platform === 'amazon') {
+        // ✅ AMAZON: Use the Discord-bot scraper to get real Amazon data
+        const amzData = await fetchAmazonDetails(dealInfo.externalId);
+        
+        if (amzData && amzData.title && amzData.title.length > 5) {
+          finalTitle = amzData.title;
+          finalImageUrl = amzData.imageUrl || '';
+          
+          if (amzData.currentPrice > 0) {
+            finalDealPrice = amzData.currentPrice;
+            finalOriginalPrice = amzData.originalPrice;
+            priceVerified = true;
+            console.log(`✅ AMAZON VERIFIED: ${dealInfo.externalId} → "${finalTitle.substring(0, 40)}" ₹${finalDealPrice} (MRP: ₹${finalOriginalPrice})`);
+          }
+        }
+      } else {
+        // ✅ FLIPKART / MYNTRA / AJIO: Fetch OpenGraph metadata from the actual product page
+        const metaData = await fetchPageMetadata(dealInfo.cleanUrl);
+        if (metaData) {
+          finalTitle = metaData.title || '';
+          finalImageUrl = metaData.imageUrl || '';
+          // Note: OG metadata rarely has prices, so we don't set priceVerified
+          console.log(`📋 ${dealInfo.platform.toUpperCase()} metadata: "${finalTitle.substring(0, 40)}" | Image: ${finalImageUrl ? 'YES' : 'NO'}`);
+        }
+      }
+
+      // =====================================================================
+      // QUALITY GATE: Skip deals that don't have proper verified data.
+      // This prevents posting garbage like "316", "Special Offer", etc.
+      // A deal MUST have a real title (>10 chars) to be posted.
+      // =====================================================================
+      if (!finalTitle || finalTitle.length < 10) {
+        console.log(`🚫 SKIPPED: No valid title found for ${dealInfo.platform}/${dealInfo.externalId}. Not posting to protect channel trust.`);
+        dealsSkippedCount++;
+        continue;
+      }
+
+      // Also skip if the title looks like a number or garbage
+      if (/^\d+$/.test(finalTitle.trim())) {
+        console.log(`🚫 SKIPPED: Title "${finalTitle}" looks like garbage (just a number). Skipping.`);
+        dealsSkippedCount++;
+        continue;
+      }
 
       const dealPlatform = await prisma.platform.upsert({
         where: { slug: dealInfo.platform },
@@ -244,49 +301,7 @@ export async function GET(request: Request) {
       // Generate the affiliate link using the unified wrapper
       const affiliateUrl = getAffiliateUrl(dealInfo.platform, dealInfo.cleanUrl, dealInfo.externalId);
 
-      let finalTitle = '';
-      let finalDealPrice = 0;
-      let finalOriginalPrice = 0;
-      let finalImageUrl = item.imageUrl || '';
-      let priceVerified = false;
-
-      if (dealInfo.platform === 'amazon') {
-        // Direct Amazon Scraping
-        const amzData = await fetchAmazonDetails(dealInfo.externalId);
-        
-        if (amzData && amzData.title) {
-          finalTitle = amzData.title;
-          if (amzData.imageUrl) finalImageUrl = amzData.imageUrl;
-          
-          if (amzData.currentPrice > 0) {
-            finalDealPrice = amzData.currentPrice;
-            finalOriginalPrice = amzData.originalPrice;
-            priceVerified = true;
-            console.log(`✅ VERIFIED: ${dealInfo.externalId} → "${finalTitle.substring(0, 40)}" ₹${finalDealPrice} (MRP: ₹${finalOriginalPrice})`);
-          }
-        }
-      } else {
-        // Flipkart / Myntra / Ajio Metadata Scraping
-        const metaData = await fetchPageMetadata(dealInfo.cleanUrl);
-        if (metaData && metaData.title) {
-          finalTitle = metaData.title;
-          if (metaData.imageUrl) finalImageUrl = metaData.imageUrl;
-        }
-      }
-
-      // Fallback 1: Use Telegram link preview title
-      if (!finalTitle && item.previewTitle) {
-        finalTitle = item.previewTitle;
-        console.log(`📋 Title from Telegram preview: ${finalTitle.substring(0, 50)}...`);
-      }
-
-      // Fallback 2: Last resort — cleaned Telegram text title
-      if (!finalTitle) {
-        finalTitle = item.title;
-        console.log(`⚠️ Title from Telegram text: ${finalTitle.substring(0, 50)}...`);
-      }
-
-      // If price is NOT verified, post without price
+      // If price is NOT verified, post without price to maintain trust
       if (!priceVerified) {
         finalDealPrice = 0;
         finalOriginalPrice = 0;
@@ -307,7 +322,7 @@ export async function GET(request: Request) {
           title: sanitizeTitle(finalTitle),
           url: dealInfo.cleanUrl,
           currentPrice: finalDealPrice, 
-          imageUrl: finalImageUrl,
+          imageUrl: finalImageUrl || null,
         }
       });
 
@@ -330,7 +345,7 @@ export async function GET(request: Request) {
       // Publish to Telegram!
       try {
         await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
-        console.log(`✅ Published: "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
+        console.log(`✅ Published: "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}] | Image: ${finalImageUrl ? 'YES' : 'NO'}`);
       } catch (err) {
         console.error(`Failed to publish deal:`, err);
       }
