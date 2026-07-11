@@ -301,6 +301,11 @@ export async function GET(request: Request) {
       // Generate the affiliate link using the unified wrapper
       const affiliateUrl = getAffiliateUrl(dealInfo.platform, dealInfo.cleanUrl, dealInfo.externalId);
 
+      // COMMISSION SAFETY: Only auto-publish if we have a working affiliate solution.
+      // Amazon = direct tag (always works) ✅
+      // Flipkart/Myntra/Ajio = needs manual EarnKaro link (no API yet) → save as Pending
+      const hasWorkingAffiliate = dealInfo.platform === 'amazon';
+
       // If price is NOT verified, post without price to maintain trust
       if (!priceVerified) {
         finalDealPrice = 0;
@@ -338,16 +343,20 @@ export async function GET(request: Request) {
           discountPct: discountPct,
           affiliateUrl: affiliateUrl,
           isGenuine: priceVerified,
-          isPublished: true,
+          isPublished: hasWorkingAffiliate, // Only mark published if auto-posting
         }
       });
 
-      // Publish to Telegram!
-      try {
-        await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
-        console.log(`✅ Published: "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}] | Image: ${finalImageUrl ? 'YES' : 'NO'}`);
-      } catch (err) {
-        console.error(`Failed to publish deal:`, err);
+      // Only auto-publish to Telegram if we have a working affiliate link
+      if (hasWorkingAffiliate) {
+        try {
+          await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
+          console.log(`✅ AUTO-PUBLISHED (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
+        } catch (err) {
+          console.error(`Failed to publish deal:`, err);
+        }
+      } else {
+        console.log(`📋 SAVED AS PENDING (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." — Needs manual EarnKaro link before publishing`);
       }
     }
 
