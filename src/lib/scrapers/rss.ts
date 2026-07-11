@@ -168,25 +168,11 @@ export function extractAmazonASIN(text: string): string | null {
 
 // Global helper to resolve ASIN (with shortlink expansion if needed)
 export async function resolveASIN(link: string, content: string): Promise<string | null> {
-  let asin = extractAmazonASIN(link + ' ' + content);
-  if (asin) return asin;
-
-  const isShortlink = link.includes('amzn.to') || 
-                      link.includes('grbn.in') || 
-                      link.includes('amazn.lt') || 
-                      link.includes('link.amazon') ||
-                      link.includes('bitly.in') ||
-                      link.includes('bitiy.in') ||
-                      link.includes('amazn.to');
-  if (isShortlink) {
-    try {
-      const expandRes = await fetch(link, { redirect: 'follow' });
-      asin = extractAmazonASIN(expandRes.url);
-    } catch (e) {
-      console.error('Failed to expand shortlink:', link);
-    }
+  const resolved = await resolveDealUrl(link, content);
+  if (resolved && resolved.platform === 'amazon') {
+    return resolved.externalId;
   }
-  return asin;
+  return null;
 }
 
 // =====================================================================
@@ -392,6 +378,80 @@ function parsePrice(text: string): number {
   return isNaN(parsed) ? 0 : Math.round(parsed);
 }
 
+// Helper to match target platforms directly
+export function tryResolvePlatformDirectly(url: string): { platform: string; cleanUrl: string; externalId: string } | null {
+  const lowerUrl = url.toLowerCase();
+  
+  // 1. Amazon check
+  if (lowerUrl.includes('amazon.in') || lowerUrl.includes('amazon.com')) {
+    const asin = extractAmazonASIN(url);
+    if (asin) {
+      return {
+        platform: 'amazon',
+        cleanUrl: `https://www.amazon.in/dp/${asin}`,
+        externalId: asin
+      };
+    }
+  }
+  
+  // 2. Flipkart check
+  if (lowerUrl.includes('flipkart.com') || lowerUrl.includes('fkrt.co') || lowerUrl.includes('fkrt.cc')) {
+    try {
+      const urlObj = new URL(url);
+      const pid = urlObj.searchParams.get('pid');
+      const cleanUrl = urlObj.origin + urlObj.pathname + (pid ? `?pid=${pid}` : '');
+      const externalId = pid || urlObj.pathname.split('/').pop() || 'fk-product';
+      return {
+        platform: 'flipkart',
+        cleanUrl,
+        externalId
+      };
+    } catch (e) {
+      // Fallback
+    }
+  }
+  
+  // 3. Myntra check
+  if (lowerUrl.includes('myntra.com') || lowerUrl.includes('myntr.in')) {
+    try {
+      const urlObj = new URL(url);
+      const cleanUrl = urlObj.origin + urlObj.pathname;
+      const externalId = urlObj.pathname.split('/').pop() || 'myntra-product';
+      return {
+        platform: 'myntra',
+        cleanUrl,
+        externalId
+      };
+    } catch (e) {}
+  }
+  
+  // 4. Ajio check
+  if (lowerUrl.includes('ajio.com') || lowerUrl.includes('ajio.co')) {
+    try {
+      const urlObj = new URL(url);
+      const cleanUrl = urlObj.origin + urlObj.pathname;
+      const externalId = urlObj.pathname.split('/').pop() || 'ajio-product';
+      return {
+        platform: 'ajio',
+        cleanUrl,
+        externalId
+      };
+    } catch (e) {}
+  }
+  
+  return null;
+}
+
+// Scans text for any platform-specific URLs
+export function findPlatformUrlInText(text: string): string | null {
+  const regex = /https?:\/\/[^\s"'`<>]*?(?:amazon\.in|amazon\.com|flipkart\.com|myntra\.com|ajio\.com)[^\s"'`<>]*/gi;
+  const match = text.match(regex);
+  if (match && match.length > 0) {
+    return match[0].replace(/&amp;/g, '&');
+  }
+  return null;
+}
+
 // Universal shortlink expander and platform resolver
 export async function resolveDealUrl(link: string, content: string = ''): Promise<{ platform: string; cleanUrl: string; externalId: string } | null> {
   const combinedText = (link + ' ' + content).trim();
@@ -406,111 +466,83 @@ export async function resolveDealUrl(link: string, content: string = ''): Promis
     };
   }
 
-  // 2. Expand shortlink if needed
-  let targetUrl = link;
-  const isShortlink = 
-    link.includes('amzn.to') || link.includes('grbn.in') || link.includes('amazn.lt') || link.includes('link.amazon') ||
-    link.includes('bitly.in') || link.includes('bitiy.in') || link.includes('amazn.to') || link.includes('amzn.in') ||
-    link.includes('fkrt.co') || link.includes('fkrt.cc') || link.includes('fktr.in') ||
-    link.includes('myntr.in') || link.includes('ajio.co') || link.includes('bit.ly') || link.includes('tinyurl.com') ||
-    link.includes('earnkaro.com') || link.includes('ekaro.in') || link.includes('extrape.com') || link.includes('affiliate');
-
-  if (isShortlink) {
+  // 2. Multi-hop redirect resolver
+  let targetUrl = link.trim();
+  const visited = new Set<string>();
+  
+  for (let hop = 0; hop < 10; hop++) {
+    if (!targetUrl || visited.has(targetUrl)) break;
+    visited.add(targetUrl);
+    
+    // Check if the current targetUrl is a direct platform url
+    const resolvedDirect = tryResolvePlatformDirectly(targetUrl);
+    if (resolvedDirect) {
+      return resolvedDirect;
+    }
+    
+    // Follow redirect manually and parse meta/JS redirects
     try {
-      // Use axios which handles redirects better, and check for meta refresh
-      const expandRes = await axios.get(link, { 
-        maxRedirects: 10,
-        validateStatus: () => true,
-        headers: { 'User-Agent': getRandomUA() }
+      const response = await axios.get(targetUrl, {
+        maxRedirects: 0, // Intercept redirects manually
+        validateStatus: (status) => status >= 200 && status < 400,
+        headers: {
+          'User-Agent': getRandomUA(),
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        },
+        timeout: 6000
       });
-      targetUrl = expandRes.request?.res?.responseUrl || link;
-
-      // Handle HTML meta refresh redirects (often used by EarnKaro and Amazon)
-      if (typeof expandRes.data === 'string') {
-        const metaRefreshMatch = expandRes.data.match(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^;]+;\s*url=([^"']+)["']?/i);
+      
+      if (response.status >= 300 && response.status < 400 && response.headers.location) {
+        let nextUrl = response.headers.location;
+        if (!nextUrl.startsWith('http')) {
+          const urlObj = new URL(targetUrl);
+          nextUrl = urlObj.origin + (nextUrl.startsWith('/') ? '' : '/') + nextUrl;
+        }
+        targetUrl = nextUrl;
+        continue;
+      }
+      
+      if (response.status === 200 && typeof response.data === 'string') {
+        // Meta refresh check
+        const metaRefreshMatch = response.data.match(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^;]+;\s*url=([^"']+)["']?/i);
         if (metaRefreshMatch && metaRefreshMatch[1]) {
           let refreshUrl = metaRefreshMatch[1].replace(/&amp;/g, '&');
           if (!refreshUrl.startsWith('http')) {
             const urlObj = new URL(targetUrl);
             refreshUrl = urlObj.origin + (refreshUrl.startsWith('/') ? '' : '/') + refreshUrl;
           }
-          const nestedRes = await axios.get(refreshUrl, { maxRedirects: 5, validateStatus: () => true, headers: { 'User-Agent': getRandomUA() } });
-          targetUrl = nestedRes.request?.res?.responseUrl || refreshUrl;
-        } else {
-           // Try finding window.location.href or window.location.replace in JS
-           const jsRedirectMatch = expandRes.data.match(/window\.location\.(?:href|replace)\s*=\s*['"]([^'"]+)['"]/i);
-           if (jsRedirectMatch && jsRedirectMatch[1]) {
-             targetUrl = jsRedirectMatch[1].replace(/&amp;/g, '&');
-           }
+          targetUrl = refreshUrl;
+          continue;
+        }
+        
+        // JS redirect check
+        const jsRedirectMatch = response.data.match(/window\.location\.(?:href|replace)\s*=\s*['"]([^'"]+)['"]/i);
+        if (jsRedirectMatch && jsRedirectMatch[1]) {
+          let refreshUrl = jsRedirectMatch[1].replace(/&amp;/g, '&');
+          if (!refreshUrl.startsWith('http')) {
+            const urlObj = new URL(targetUrl);
+            refreshUrl = urlObj.origin + (refreshUrl.startsWith('/') ? '' : '/') + refreshUrl;
+          }
+          targetUrl = refreshUrl;
+          continue;
+        }
+        
+        // Scan HTML text body for direct platform URLs
+        const foundPlatformUrl = findPlatformUrlInText(response.data);
+        if (foundPlatformUrl) {
+          targetUrl = foundPlatformUrl;
+          continue;
         }
       }
-    } catch (e) {
-      console.error('Failed to expand shortlink:', link);
+      
+      break;
+    } catch (err: any) {
+      console.error(`Error resolving hop ${hop} for ${targetUrl}:`, err.message);
+      break;
     }
   }
-
-  // 3. Resolve platform from the clean URL
-  const lowerUrl = targetUrl.toLowerCase();
-
-  // Double check Amazon after redirect
-  if (lowerUrl.includes('amazon.in') || lowerUrl.includes('amazon.com')) {
-    const asin = extractAmazonASIN(targetUrl);
-    if (asin) {
-      return {
-        platform: 'amazon',
-        cleanUrl: `https://www.amazon.in/dp/${asin}`,
-        externalId: asin
-      };
-    }
-  }
-
-  if (lowerUrl.includes('flipkart.com') || lowerUrl.includes('fkrt.co') || lowerUrl.includes('fkrt.cc')) {
-    try {
-      const urlObj = new URL(targetUrl);
-      const pid = urlObj.searchParams.get('pid');
-      const cleanUrl = urlObj.origin + urlObj.pathname + (pid ? `?pid=${pid}` : '');
-      const externalId = pid || urlObj.pathname.split('/').pop() || 'fk-product';
-      return {
-        platform: 'flipkart',
-        cleanUrl,
-        externalId
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  if (lowerUrl.includes('myntra.com') || lowerUrl.includes('myntr.in')) {
-    try {
-      const urlObj = new URL(targetUrl);
-      const cleanUrl = urlObj.origin + urlObj.pathname;
-      const externalId = urlObj.pathname.split('/').pop() || 'myntra-product';
-      return {
-        platform: 'myntra',
-        cleanUrl,
-        externalId
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  if (lowerUrl.includes('ajio.com') || lowerUrl.includes('ajio.co')) {
-    try {
-      const urlObj = new URL(targetUrl);
-      const cleanUrl = urlObj.origin + urlObj.pathname;
-      const externalId = urlObj.pathname.split('/').pop() || 'ajio-product';
-      return {
-        platform: 'ajio',
-        cleanUrl,
-        externalId
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  return null;
+  
+  return tryResolvePlatformDirectly(targetUrl);
 }
 
 // Scrapes OpenGraph tags by posing as a Discord preview bot (extremely reliable, captcha-free)
