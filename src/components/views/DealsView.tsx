@@ -37,7 +37,7 @@ export default function DealsView() {
   const [platform, setPlatform] = useState('');
   const [externalId, setExternalId] = useState('');
   const [cleanUrl, setCleanUrl] = useState('');
-
+  const [customAffiliateUrl, setCustomAffiliateUrl] = useState('');
 
   // Helper to parse pasted Telegram deal posts
   const parseTelegramPostText = (text: string) => {
@@ -116,6 +116,13 @@ export default function DealsView() {
         setOriginalPrice(parsed.mrp);
         setFetchedDeal({ title: parsed.title, currentPrice: parsed.price, originalPrice: parsed.mrp });
         
+        // If they pasted an ekaro.in link directly, preserve it!
+        if (parsed.link.includes('ekaro.in')) {
+          setCustomAffiliateUrl(parsed.link);
+        } else {
+          setCustomAffiliateUrl('');
+        }
+        
         // Resolve target shortlink and fetch image in the background
         setFetching(true);
         try {
@@ -178,6 +185,12 @@ export default function DealsView() {
     if (!importLink) return alert('Please paste a link first!');
     setFetching(true);
     setFetchedDeal(null);
+    setCustomAffiliateUrl('');
+    
+    // If they pasted an ekaro.in link directly, preserve it!
+    if (importLink.includes('ekaro.in')) {
+      setCustomAffiliateUrl(importLink);
+    }
     
     try {
       const res = await fetch('/api/deals/auto-import', {
@@ -230,9 +243,10 @@ export default function DealsView() {
           cleanUrl,
           imageUrl,
           platform,
-          externalId
+          externalId,
+          customAffiliateUrl
         })
-      });
+      });     });
       
       const data = await res.json();
       if (data.error) {
@@ -413,6 +427,18 @@ export default function DealsView() {
                     style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: '8px', color: 'var(--text-muted)', fontSize: '12px', cursor: 'not-allowed' }}
                   />
                 </div>
+              </div>
+              
+              {/* Custom Affiliate Link Override */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 500 }}>Custom Affiliate URL (Optional - Overrides Auto-generation)</label>
+                <input
+                  type="text"
+                  value={customAffiliateUrl}
+                  onChange={(e) => setCustomAffiliateUrl(e.target.value)}
+                  placeholder="Paste your ekaro.in or custom tracking link here if you don't want the system to auto-generate one..."
+                  style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)', borderRadius: '8px', color: 'var(--accent-emerald)', fontSize: '12px' }}
+                />
               </div>
 
               {/* Action Buttons */}

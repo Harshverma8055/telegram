@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     });
 
     // 2. Generate custom affiliate link using the configured providers (Amazon, EarnKaro, or ExtraPe)
-    const affiliateUrl = getAffiliateUrl(platformSlug, cleanUrl, externalId);
+    const affiliateUrl = body.customAffiliateUrl || getAffiliateUrl(platformSlug, cleanUrl, externalId);
 
     // 3. Create or update product
     const product = await prisma.product.upsert({
