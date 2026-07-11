@@ -91,12 +91,12 @@ export default function DealsView() {
       if (lower.includes('mrp') || lower.includes('price') || lower.includes('off') || lower.includes('%')) continue;
       if (line.replace(/[^\d]/g, '').length > 4) continue;
       
-      title = line.replace(/^[\s\p{Emoji}\u2700-\u27BF\uE000-\uF8FF\uD83C[\uDF00-\uDFFF]\uD83D[\uDC00-\uDDFF]\uD83E[\uDD00-\uDFFF]]+/gu, '').trim();
+      title = line.replace(/^[\s\u2700-\u27BF\u2600-\u26FF\uFE0F\u20E3]+/g, '').replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]/g, '').trim();
       if (title.length > 5) break;
     }
 
     if (!title && lines.length > 0) {
-      title = lines[0].replace(/^[\s\p{Emoji}]+/gu, '').trim();
+      title = lines[0].replace(/^[\s\u2700-\u27BF\u2600-\u26FF\uFE0F\u20E3]+/g, '').replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]/g, '').trim();
     }
 
     return { title, mrp, price, link };
