@@ -257,7 +257,7 @@ export default function WatchlistView() {
               </>
             ) : (
               <>
-                🎒 Pre-populate 25+ Student & Hostel Essentials (High Commission)
+                🎒 Pre-populate 90+ Student & Hostel Essentials (High Commission)
               </>
             )}
           </button>
