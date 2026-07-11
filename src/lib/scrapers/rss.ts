@@ -250,17 +250,21 @@ export async function fetchAmazonDetails(asin: string) {
     if (result) return result;
   }
 
-  // Layer 2: Direct desktop with rotating UA + delay
+  // Layer 2: Discordbot preview UA (extremely reliable, bypasses captcha)
+  const discordResult = await tryAmazonFetch(asin, 'discord');
+  if (discordResult) return discordResult;
+
+  // Layer 3: Direct desktop with rotating UA + delay
   await randomDelay();
   const result = await tryAmazonFetch(asin, 'desktop');
   if (result) return result;
 
-  // Layer 3: Amazon mobile site (less aggressive blocking)
+  // Layer 4: Amazon mobile site (less aggressive blocking)
   await randomDelay();
   return tryAmazonFetch(asin, 'mobile');
 }
 
-async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile') {
+async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile' | 'discord') {
   try {
     let url: string;
     let headers: Record<string, string>;
@@ -269,6 +273,13 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
       const amzUrl = `https://www.amazon.in/dp/${asin}`;
       url = `http://api.scraperapi.com?api_key=${process.env.SCRAPER_API_KEY}&url=${encodeURIComponent(amzUrl)}&country_code=in`;
       headers = { 'User-Agent': getRandomUA() };
+    } else if (mode === 'discord') {
+      url = `https://www.amazon.in/dp/${asin}`;
+      headers = {
+        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-IN,en;q=0.9',
+      };
     } else if (mode === 'mobile') {
       // Amazon mobile site has weaker bot detection
       url = `https://www.amazon.in/dp/${asin}`;
@@ -308,6 +319,9 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
     if (!title) {
       // Mobile site sometimes uses a different selector
       title = $('#title').text().trim();
+    }
+    if (!title) {
+      title = $('meta[property="og:title"]').attr('content')?.trim() || '';
     }
     if (!title) return null; // Captcha or blocked
 
@@ -350,7 +364,10 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
     }
     
     // Extract Image
-    const imageUrl = $('#landingImage').attr('src') || $('#imgBlkFront').attr('src') || '';
+    let imageUrl = $('#landingImage').attr('src') || $('#imgBlkFront').attr('src') || '';
+    if (!imageUrl) {
+      imageUrl = $('meta[property="og:image"]').attr('content') || '';
+    }
 
     // Fix edge cases
     if (originalPrice < currentPrice) {
