@@ -392,6 +392,7 @@ export async function GET(request: Request) {
 
     // Stage 3: Process the best deals — ALWAYS fetch fresh data from the SOURCE, never trust competitor text
     const topCandidates = candidates.slice(0, MAX_NEW_DEALS_PER_RUN);
+    const processedTitlePrefixes = new Set<string>();
 
     for (const candidate of topCandidates) {
       if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
@@ -467,6 +468,34 @@ export async function GET(request: Request) {
         continue;
       }
 
+      // De-duplicate color/RAM/storage variants of the same product in the same run
+      const cleanTitle = sanitizeTitle(finalTitle);
+      const titlePrefix = cleanTitle.substring(0, 30).toLowerCase().trim();
+      if (processedTitlePrefixes.has(titlePrefix)) {
+        console.log(`🚫 SKIPPED: Similar product variant already processed in this run: "${finalTitle}"`);
+        dealsSkippedCount++;
+        continue;
+      }
+      processedTitlePrefixes.add(titlePrefix);
+
+      // De-duplicate against recently posted products in the last 24 hours
+      const recentSimilarProduct = await prisma.product.findFirst({
+        where: {
+          title: {
+            startsWith: cleanTitle.substring(0, 30),
+            mode: 'insensitive'
+          },
+          lastScrapedAt: {
+            gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+          }
+        }
+      });
+      if (recentSimilarProduct) {
+        console.log(`🚫 SKIPPED: Similar product already posted in the last 24 hours: "${finalTitle}"`);
+        dealsSkippedCount++;
+        continue;
+      }
+
       const dealPlatform = await prisma.platform.upsert({
         where: { slug: dealInfo.platform },
         update: {},
@@ -494,9 +523,22 @@ export async function GET(request: Request) {
       
       dealsFoundCount++;
 
-      // Save product
-      const product = await prisma.product.create({
-        data: {
+      // Save product (use upsert to be robust against concurrent inserts or manual entries)
+      const product = await prisma.product.upsert({
+        where: {
+          platformId_externalId: {
+            platformId: dealPlatform.id,
+            externalId: dealInfo.externalId
+          }
+        },
+        update: {
+          title: sanitizeTitle(finalTitle),
+          url: dealInfo.cleanUrl,
+          currentPrice: finalDealPrice,
+          imageUrl: finalImageUrl || null,
+          lastScrapedAt: new Date()
+        },
+        create: {
           platformId: dealPlatform.id,
           externalId: dealInfo.externalId,
           title: sanitizeTitle(finalTitle),
