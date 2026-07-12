@@ -5,7 +5,7 @@ import axios from 'axios';
 import prisma from '@/lib/prisma';
 
 // Helper to scrape HTML and extract pricing info for Flipkart, Myntra, Ajio
-async function scrapePriceAndMRP(url: string, platform: string) {
+export async function scrapePriceAndMRP(url: string, platform: string) {
   try {
     const response = await axios.get(url, {
       headers: {
