@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { resolveDealUrl, fetchAmazonDetails } from '@/lib/scrapers/rss';
-import { scrapePriceAndMRP } from '@/app/api/deals/auto-import/route'; // We can import this or implement a fallback
 import { sanitizeTitle } from '@/lib/telegram';
 
 export async function GET() {
