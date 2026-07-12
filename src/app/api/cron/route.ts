@@ -152,8 +152,10 @@ export async function GET(request: Request) {
   }
 
   const startTime = Date.now();
-  const MAX_EXECUTION_TIME_MS = 8000; // 8 seconds limit for Vercel Free Tier (10s max)
-  const MAX_NEW_DEALS_PER_RUN = 5; // Only process 5 new deals at a time
+  // Vercel Hobby plan gives 60s for cron-triggered routes.
+  // We use 50s as our safe ceiling to leave buffer for DB writes.
+  const MAX_EXECUTION_TIME_MS = 50000;
+  const MAX_NEW_DEALS_PER_RUN = 8; // Process up to 8 new deals per run
 
   try {
     let dealsFoundCount = 0;
@@ -176,7 +178,8 @@ export async function GET(request: Request) {
 
       for (const prod of watchedProducts) {
         // Limit processing inside cron to keep it under execution limit
-        if (Date.now() - startTime > 3000) break;
+        // Allow up to 15s for watchlist checks (they're important for price drops)
+        if (Date.now() - startTime > 15000) break;
 
         let latestPrice = 0;
         let originalPrice = prod.mrp || 0;
@@ -325,14 +328,15 @@ export async function GET(request: Request) {
 
     for (const channel of shuffledChannels) {
       // Check timeout to make sure we leave enough time for Stage 3 (Amazon/Metadata fetching)
-      if (Date.now() - startTime > 3500 || candidates.length >= 15) {
+      // Allow up to 35s total for competitor scraping
+      if (Date.now() - startTime > 35000 || candidates.length >= 20) {
         break;
       }
 
       const deals = await fetchTelegramDeals(channel);
       
       for (const item of deals) {
-        if (Date.now() - startTime > 3500 || candidates.length >= 15) {
+        if (Date.now() - startTime > 35000 || candidates.length >= 20) {
           break;
         }
 
