@@ -290,13 +290,22 @@ export async function GET(request: Request) {
         create: { name: 'Amazon', slug: 'amazon' }
       });
 
-      for (const asin of amazonDealsAsins) {
-        // Skip if already in database
-        const existingDeal = await prisma.product.findUnique({
-          where: { platformId_externalId: { platformId: amazonPlatform.id, externalId: asin } }
-        });
+      // Slice to first 40 ASINs to keep execution extremely fast and fit in cron limits
+      const slicedAsins = amazonDealsAsins.slice(0, 40);
 
-        if (existingDeal) {
+      // Batch query all existing products in one single database call
+      const existingProducts = await prisma.product.findMany({
+        where: {
+          platformId: amazonPlatform.id,
+          externalId: { in: slicedAsins }
+        },
+        select: { externalId: true }
+      });
+      const existingAsinsSet = new Set(existingProducts.map(p => p.externalId));
+
+      for (const asin of slicedAsins) {
+        // Skip if already in database (using our fast O(1) set lookup)
+        if (existingAsinsSet.has(asin)) {
           continue;
         }
 
