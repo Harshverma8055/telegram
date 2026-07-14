@@ -42,17 +42,33 @@ function randomDelay(): Promise<void> {
 // =====================================================================
 export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]> {
   try {
-    const url = `https://t.me/s/${channelName}`;
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': getRandomUA(),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-      },
-      timeout: 8000
-    });
+    let url = `https://t.me/s/${channelName}`;
+    let response;
+    try {
+      response = await axios.get(url, {
+        headers: {
+          'User-Agent': getRandomUA(),
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+        },
+        timeout: 8000
+      });
+    } catch (e: any) {
+      console.log(`⚠️ t.me failed for ${channelName} (${e.message}), trying telegram.me fallback...`);
+      url = `https://telegram.me/s/${channelName}`;
+      response = await axios.get(url, {
+        headers: {
+          'User-Agent': getRandomUA(),
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+        },
+        timeout: 8000
+      });
+    }
     const $ = cheerio.load(response.data);
     const deals: RSSDeal[] = [];
 

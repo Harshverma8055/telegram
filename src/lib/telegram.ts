@@ -43,8 +43,18 @@ export function sanitizeTitle(rawTitle: string): string {
     .trim();
 }
 
+export function escapeMarkdown(text: string): string {
+  return text
+    .replace(/_/g, '\\_')
+    .replace(/\*/g, '\\*')
+    .replace(/\[/g, '\\[')
+    .replace(/`/g, '\\`');
+}
+
 export function generateDealCaption(deal: DealMessageParams, platform: 'telegram' | 'whatsapp' = 'telegram'): string {
   const cleanTitle = sanitizeTitle(deal.title);
+  const escapedTitle = platform === 'telegram' ? escapeMarkdown(cleanTitle) : cleanTitle;
+  const escapedBankOffer = (deal.bankOffer && platform === 'telegram') ? escapeMarkdown(deal.bankOffer) : (deal.bankOffer || '');
   
   // Random templates to avoid copy detection
   const intros = [
@@ -83,7 +93,7 @@ export function generateDealCaption(deal: DealMessageParams, platform: 'telegram
   // TELEGRAM CAPTION — Two modes based on price verification
   // =====================================================================
   let msg = `${intro}\n\n`;
-  msg += `*${cleanTitle}*\n\n`;
+  msg += `*${escapedTitle}*\n\n`;
   
   if (deal.dealPrice > 0 && deal.originalPrice && deal.originalPrice > 0) {
     // ✅ VERIFIED: We have real prices from Amazon — show them proudly!
@@ -99,8 +109,8 @@ export function generateDealCaption(deal: DealMessageParams, platform: 'telegram
     msg += `👉 _Tap the button below to check the latest price_\n\n`;
   }
 
-  if (deal.bankOffer) {
-    msg += `🏦 *Bank Offer:* ${deal.bankOffer}\n\n`;
+  if (escapedBankOffer) {
+    msg += `🏦 *Bank Offer:* ${escapedBankOffer}\n\n`;
   }
 
   msg += `👇 *Buy Now (Link in button below)* 👇`;
