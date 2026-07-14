@@ -1,5 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import dns from 'dns';
+import https from 'https';
 
 export interface RSSDeal {
   title: string;
@@ -37,6 +39,20 @@ function randomDelay(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const customDnsLookup = (hostname: string, options: any, callback: any) => {
+  if (hostname === 't.me' || hostname === 'telegram.me') {
+    if (options && options.all) {
+      callback(null, [{ address: '149.154.167.99', family: 4 }]);
+    } else {
+      callback(null, '149.154.167.99', 4);
+    }
+  } else {
+    dns.lookup(hostname, options, callback);
+  }
+};
+
+const telegramHttpsAgent = new https.Agent({ lookup: customDnsLookup });
+
 // =====================================================================
 // TELEGRAM SCRAPER — Now also extracts the link preview (free real data!)
 // =====================================================================
@@ -46,6 +62,7 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
     let response;
     try {
       response = await axios.get(url, {
+        httpsAgent: telegramHttpsAgent,
         headers: {
           'User-Agent': getRandomUA(),
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -59,6 +76,7 @@ export async function fetchTelegramDeals(channelName: string): Promise<RSSDeal[]
       console.log(`⚠️ t.me failed for ${channelName} (${e.message}), trying telegram.me fallback...`);
       url = `https://telegram.me/s/${channelName}`;
       response = await axios.get(url, {
+        httpsAgent: telegramHttpsAgent,
         headers: {
           'User-Agent': getRandomUA(),
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

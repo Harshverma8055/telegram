@@ -86,7 +86,7 @@ export async function GET(request: Request) {
   }
 
   console.log('📡 Starting Vercel Cron: Deal Scraper...');
-  
+
   // 1. PROCESS RECURRING/REPOST SCHEDULES
   try {
     const now = new Date();
@@ -211,7 +211,7 @@ export async function GET(request: Request) {
             const html = await response.text();
             const cheerio = require('cheerio');
             const $ = cheerio.load(html);
-            
+
             // Try parsing price from HTML
             const priceRegex = /(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/i;
             $('span, div, p').each((_: number, el: any) => {
@@ -230,7 +230,7 @@ export async function GET(request: Request) {
 
         if (latestPrice > 0) {
           const previousPrice = prod.currentPrice || latestPrice;
-          
+
           // Save price history if price changed
           if (latestPrice !== previousPrice) {
             await prisma.priceHistory.create({
@@ -239,7 +239,7 @@ export async function GET(request: Request) {
                 price: latestPrice
               }
             });
-            
+
             // Update current price on product
             await prisma.product.update({
               where: { id: prod.id },
@@ -256,10 +256,10 @@ export async function GET(request: Request) {
           // Check if price dropped significantly! (e.g. drop of 5% or more compared to previousPrice or MRP)
           const dropFromPrevious = previousPrice - latestPrice;
           const dropFromMRP = originalPrice - latestPrice;
-          
+
           if (dropFromPrevious > 0 || (dropFromMRP / originalPrice) >= 0.1) {
             console.log(`🔥 WATCHLIST PRICE DROP DETECTED for "${prod.title}": ₹${previousPrice} -> ₹${latestPrice}`);
-            
+
             // Add as high-priority candidate!
             candidates.push({
               dealInfo: {
@@ -289,7 +289,7 @@ export async function GET(request: Request) {
     try {
       console.log('📡 Scraping Amazon Deals page for direct deals...');
       const amazonDealsAsins = await scrapeAmazonDealsPage();
-      
+
       const amazonPlatform = await prisma.platform.upsert({
         where: { slug: 'amazon' },
         update: {},
@@ -331,7 +331,7 @@ export async function GET(request: Request) {
             content: 'Direct deal from Amazon Today\'s Deals page'
           },
           // Direct deals from the official Deals page get a high base score!
-          priorityScore: 55 
+          priorityScore: 55
         });
       }
     } catch (amzDealsErr: any) {
@@ -349,7 +349,7 @@ export async function GET(request: Request) {
       }
 
       const deals = await fetchTelegramDeals(channel);
-      
+
       for (const item of deals) {
         if (Date.now() - startTime > 35000 || candidates.length >= 20) {
           break;
@@ -433,11 +433,11 @@ export async function GET(request: Request) {
       } else if (dealInfo.platform === 'amazon') {
         // ✅ AMAZON: Use the Discord-bot scraper to get real Amazon data
         const amzData = await fetchAmazonDetails(dealInfo.externalId);
-        
+
         if (amzData && amzData.title && amzData.title.length > 5) {
           finalTitle = amzData.title;
           finalImageUrl = amzData.imageUrl || '';
-          
+
           if (amzData.currentPrice > 0) {
             finalDealPrice = amzData.currentPrice;
             finalOriginalPrice = amzData.originalPrice;
@@ -536,10 +536,10 @@ export async function GET(request: Request) {
         console.log(`⚠️ UNVERIFIED PRICE for ${dealInfo.externalId} — will post without price to maintain trust`);
       }
 
-      const discountPct = (priceVerified && finalOriginalPrice > finalDealPrice) 
-        ? Math.round(((finalOriginalPrice - finalDealPrice) / finalOriginalPrice) * 100) 
+      const discountPct = (priceVerified && finalOriginalPrice > finalDealPrice)
+        ? Math.round(((finalOriginalPrice - finalDealPrice) / finalOriginalPrice) * 100)
         : 0;
-      
+
       dealsFoundCount++;
 
       // Save product (use upsert to be robust against concurrent inserts or manual entries)
@@ -562,7 +562,7 @@ export async function GET(request: Request) {
           externalId: dealInfo.externalId,
           title: sanitizeTitle(finalTitle),
           url: dealInfo.cleanUrl,
-          currentPrice: finalDealPrice, 
+          currentPrice: finalDealPrice,
           imageUrl: finalImageUrl || null,
         }
       });
@@ -574,8 +574,8 @@ export async function GET(request: Request) {
           platformId: dealPlatform.id,
           dealType: 'price_drop',
           dealScore: priceVerified ? 95 : 70,
-          dealPrice: finalDealPrice, 
-          originalPrice: finalOriginalPrice, 
+          dealPrice: finalDealPrice,
+          originalPrice: finalOriginalPrice,
           discountPct: discountPct,
           affiliateUrl: affiliateUrl,
           isGenuine: priceVerified,
@@ -596,10 +596,10 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       newDealsFound: dealsFoundCount,
-      dealsSkipped: dealsSkippedCount 
+      dealsSkipped: dealsSkippedCount
     });
 
   } catch (error: any) {
