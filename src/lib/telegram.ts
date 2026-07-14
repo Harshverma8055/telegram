@@ -117,6 +117,10 @@ export async function publishToTelegram(dealId: string, channelId: string) {
 
     if (!deal) throw new Error('Deal not found');
 
+    if (!deal.product.imageUrl || !deal.product.imageUrl.trim().startsWith('http')) {
+      throw new Error('Cannot publish to Telegram: Product does not have a valid image URL');
+    }
+
     const caption = generateDealCaption({
       title: deal.product.title,
       originalPrice: deal.originalPrice,

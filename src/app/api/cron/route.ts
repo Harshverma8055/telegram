@@ -453,10 +453,16 @@ export async function GET(request: Request) {
       // =====================================================================
       // QUALITY GATE: Skip deals that don't have proper verified data.
       // This prevents posting garbage like "316", "Special Offer", etc.
-      // A deal MUST have a real title (>10 chars) to be posted.
+      // A deal MUST have a real title (>10 chars) and a valid image URL to be posted.
       // =====================================================================
       if (!finalTitle || finalTitle.length < 10) {
         console.log(`🚫 SKIPPED: No valid title found for ${dealInfo.platform}/${dealInfo.externalId}. Not posting to protect channel trust.`);
+        dealsSkippedCount++;
+        continue;
+      }
+
+      if (!finalImageUrl || !finalImageUrl.startsWith('http')) {
+        console.log(`🚫 SKIPPED: No valid image found for ${dealInfo.platform}/${dealInfo.externalId}. Skipping to avoid posts without images.`);
         dealsSkippedCount++;
         continue;
       }
