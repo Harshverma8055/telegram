@@ -43,6 +43,12 @@ const LOW_PRIORITY_KEYWORDS = [
   'geyser', 'microwave', 'oven', 'chimney', 'dishwasher', 'furniture', 'sofa', 'mattress'
 ];
 
+function isToysDeal(title: string): boolean {
+  const lower = title.toLowerCase();
+  const regex = /\b(toys?|dolls?|barbie|play-?doh|action figures?|rattles?|teethers?|baby walkers?|soft toys?|plushies?|stuffed animals?|stuffed toys?|slime kits?|nerf guns?|legos?)\b/i;
+  return regex.test(lower);
+}
+
 function calculatePriorityScore(title: string): number {
   let score = 0;
   const lower = title.toLowerCase();
@@ -463,6 +469,13 @@ export async function GET(request: Request) {
 
       if (!finalImageUrl || !finalImageUrl.startsWith('http')) {
         console.log(`🚫 SKIPPED: No valid image found for ${dealInfo.platform}/${dealInfo.externalId}. Skipping to avoid posts without images.`);
+        dealsSkippedCount++;
+        continue;
+      }
+
+      // Skip toy and children products
+      if (isToysDeal(finalTitle)) {
+        console.log(`🚫 SKIPPED: Toy/children product detected: "${finalTitle}"`);
         dealsSkippedCount++;
         continue;
       }
