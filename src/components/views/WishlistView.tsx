@@ -1069,7 +1069,46 @@ export default function WishlistView() {
               </div>
             </div>
 
-            <div style={{ borderTop: '1px solid var(--border-primary)', margin: '4px 0' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>🎯 Auto-Publish Target Price (₹)</label>
+                <input 
+                  type="number"
+                  placeholder="Optional (e.g. 499)"
+                  value={editingProduct.target_price || ''}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, target_price: e.target.value ? parseFloat(e.target.value) : null })}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '8px 12px',
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>🎯 Auto-Publish Min Discount (%)</label>
+                <input 
+                  type="number"
+                  placeholder="Optional (e.g. 50)"
+                  value={editingProduct.target_discount || ''}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, target_discount: e.target.value ? parseFloat(e.target.value) : null })}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '8px 12px',
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border-primary)', margin: '12px 0 4px 0' }} />
             <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>Tune Target & Intent Scores (0–100)</h4>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

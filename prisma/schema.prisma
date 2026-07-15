@@ -147,6 +147,8 @@ model WishlistProduct {
   giftScore     Float    @default(0) @map("gift_score")
   affiliateScore Float   @default(0) @map("affiliate_score")
   wishlist      Boolean  @default(true)
+  targetPrice   Float?   @map("target_price")
+  targetDiscount Float?  @map("target_discount")
   lastUpdated   DateTime @default(now()) @map("last_updated")
 }
 

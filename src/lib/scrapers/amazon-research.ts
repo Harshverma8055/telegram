@@ -727,6 +727,8 @@ export async function ensureWishlistTableExists() {
         "gift_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
         "affiliate_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
         "wishlist" BOOLEAN NOT NULL DEFAULT true,
+        "target_price" DOUBLE PRECISION,
+        "target_discount" DOUBLE PRECISION,
         "last_updated" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
         CONSTRAINT "WishlistProduct_pkey" PRIMARY KEY ("id")

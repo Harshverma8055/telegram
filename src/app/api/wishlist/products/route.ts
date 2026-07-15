@@ -116,8 +116,19 @@ export async function PUT(request: Request) {
   try {
     await ensureWishlistTableExists();
     const body = await request.json();
-    const { id, title, price, mrp, wishlist, priorityScore, studentScore, hostelScore, fashionScore, giftScore, buyScore } = body;
-
+    const id = body.id;
+    const title = body.title;
+    const price = body.price;
+    const mrp = body.mrp;
+    const wishlist = body.wishlist;
+    const priorityScore = body.priorityScore !== undefined ? body.priorityScore : body.priority_score;
+    const studentScore = body.studentScore !== undefined ? body.studentScore : body.student_score;
+    const hostelScore = body.hostelScore !== undefined ? body.hostelScore : body.hostel_score;
+    const fashionScore = body.fashionScore !== undefined ? body.fashionScore : body.fashion_score;
+    const giftScore = body.giftScore !== undefined ? body.giftScore : body.gift_score;
+    const buyScore = body.buyScore !== undefined ? body.buyScore : body.buy_score;
+    const targetPrice = body.targetPrice !== undefined ? body.targetPrice : body.target_price;
+    const targetDiscount = body.targetDiscount !== undefined ? body.targetDiscount : body.target_discount;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Missing product ID' }, { status: 400 });
     }
@@ -143,6 +154,8 @@ export async function PUT(request: Request) {
     addField('fashion_score', fashionScore !== undefined ? parseFloat(fashionScore) : undefined);
     addField('gift_score', giftScore !== undefined ? parseFloat(giftScore) : undefined);
     addField('buy_score', buyScore !== undefined ? parseFloat(buyScore) : undefined);
+    addField('target_price', targetPrice !== undefined ? (targetPrice === null ? null : parseFloat(targetPrice)) : undefined);
+    addField('target_discount', targetDiscount !== undefined ? (targetDiscount === null ? null : parseFloat(targetDiscount)) : undefined);
 
     if (fieldsToUpdate.length === 0) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });

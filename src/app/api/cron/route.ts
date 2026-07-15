@@ -339,6 +339,108 @@ export async function GET(request: Request) {
       console.error('Error checking watchlist in cron:', watchlistErr.message);
     }
 
+    // Stage 0b: Wishlist Target Price Drop & Discount Checker (Auto-posts targeted wishlist items)
+    try {
+      console.log('📡 Checking targeted wishlist products for price drops/discounts...');
+      const targetedWishlistProducts = await prisma.$queryRawUnsafe<any[]>(`
+        SELECT * FROM "WishlistProduct" 
+        WHERE "wishlist" = true 
+          AND ("target_price" IS NOT NULL OR "target_discount" IS NOT NULL)
+      `);
+
+      for (const prod of targetedWishlistProducts) {
+        // Enforce execution limit to keep cron fast
+        if (Date.now() - startTime > 25000) break;
+
+        console.log(`🔎 Checking targeted wishlist item: ${prod.asin} (Target Price: ${prod.target_price}, Target Discount: ${prod.target_discount}%)`);
+        const details = await fetchAmazonDetails(prod.asin);
+        if (!details) {
+          console.log(`⚠️ Failed to fetch current details for targeted wishlist item ${prod.asin}`);
+          continue;
+        }
+
+        const latestPrice = details.currentPrice;
+        const originalPrice = details.originalPrice || prod.mrp || latestPrice;
+        const latestDiscount = originalPrice > latestPrice 
+          ? Math.round(((originalPrice - latestPrice) / originalPrice) * 100) 
+          : 0;
+
+        // Check if conditions are met
+        const hasHitTargetPrice = prod.target_price ? latestPrice <= prod.target_price : false;
+        const hasHitTargetDiscount = prod.target_discount ? latestDiscount >= prod.target_discount : false;
+
+        if (hasHitTargetPrice || hasHitTargetDiscount) {
+          console.log(`🎯 WISHLIST TARGET MET for "${prod.title}": ₹${latestPrice} (${latestDiscount}% off)`);
+
+          const affiliateUrl = getAffiliateUrl('amazon', prod.amazon_url, prod.asin);
+
+          const amazonPlatform = await prisma.platform.upsert({
+            where: { slug: 'amazon' },
+            update: {},
+            create: { name: 'Amazon', slug: 'amazon' }
+          });
+
+          // Insert into main Product tracker
+          const product = await prisma.product.upsert({
+            where: {
+              platformId_externalId: {
+                platformId: amazonPlatform.id,
+                externalId: prod.asin
+              }
+            },
+            update: {
+              title: sanitizeTitle(details.title),
+              url: prod.amazon_url,
+              currentPrice: latestPrice,
+              imageUrl: details.imageUrl || prod.image,
+              lastScrapedAt: new Date()
+            },
+            create: {
+              platformId: amazonPlatform.id,
+              externalId: prod.asin,
+              title: sanitizeTitle(details.title),
+              url: prod.amazon_url,
+              currentPrice: latestPrice,
+              imageUrl: details.imageUrl || prod.image,
+            }
+          });
+
+          // Create active deal
+          const deal = await prisma.deal.create({
+            data: {
+              productId: product.id,
+              platformId: amazonPlatform.id,
+              dealType: 'price_drop',
+              dealScore: 99,
+              dealPrice: latestPrice,
+              originalPrice: originalPrice,
+              discountPct: latestDiscount,
+              affiliateUrl: affiliateUrl,
+              isGenuine: true,
+              isPublished: false
+            }
+          });
+
+          // Toggle wishlist flag so we don't spam the target checker
+          await prisma.$executeRawUnsafe(
+            `UPDATE "WishlistProduct" SET "wishlist" = false, "last_updated" = NOW() WHERE "id" = $1`,
+            prod.id
+          );
+
+          if (!isSilent) {
+            try {
+              await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
+              console.log(`✅ WISHLIST AUTO-PUBLISHED: "${details.title.substring(0, 30)}..." to ${TELEGRAM_CHANNEL}`);
+            } catch (publishErr) {
+              console.error(`Failed to publish wishlist deal to telegram:`, publishErr);
+            }
+          }
+        }
+      }
+    } catch (wishlistErr: any) {
+      console.error('Error checking targeted wishlist products in cron:', wishlistErr.message);
+    }
+
     // Stage 1a: Direct Amazon Deals Page Scraper (Safe, official-source, no competitor copying)
     try {
       console.log('📡 Scraping Amazon Deals page for direct deals...');
