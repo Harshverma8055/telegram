@@ -39,6 +39,7 @@ export default function DealsView() {
   const [externalId, setExternalId] = useState('');
   const [cleanUrl, setCleanUrl] = useState('');
   const [customAffiliateUrl, setCustomAffiliateUrl] = useState('');
+  const [quickPublishChannel, setQuickPublishChannel] = useState('@fantasticofffer,@hosteldeals');
 
   // Helper to parse pasted Telegram deal posts
   const parseTelegramPostText = (text: string) => {
@@ -260,7 +261,7 @@ export default function DealsView() {
         const publishRes = await fetch('/api/telegram/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dealId: data.dealId, channelId: '@fantasticofffer' })
+          body: JSON.stringify({ dealId: data.dealId, channelId: quickPublishChannel })
         });
         const publishData = await publishRes.json();
         if (publishData.success) {
@@ -440,6 +441,33 @@ export default function DealsView() {
                   placeholder="Paste your ekaro.in or custom tracking link here if you don't want the system to auto-generate one..."
                   style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)', borderRadius: '8px', color: 'var(--accent-emerald)', fontSize: '12px' }}
                 />
+              </div>
+              
+              {/* Target Channel Selection */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 500 }}>Target Telegram Channel(s)</label>
+                <select
+                  value={quickPublishChannel}
+                  onChange={(e) => setQuickPublishChannel(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '14px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="@fantasticofffer,@hosteldeals">Both Channels (Main & Hostel) [Default]</option>
+                  <option value="@fantasticofffer">Main Deals Channel only (@fantasticofffer)</option>
+                  <option value="@hosteldeals">Hostel Deals Channel only (@hosteldeals)</option>
+                </select>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Select where you want this manually-imported deal to be published.
+                </span>
               </div>
 
               {/* Action Buttons */}
