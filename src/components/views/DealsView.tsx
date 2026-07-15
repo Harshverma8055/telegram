@@ -16,6 +16,7 @@ import {
   Send,
   Plus
 } from 'lucide-react';
+import Image from 'next/image';
 import { getDealScoreClass, formatCurrency } from '@/lib/mock-data';
 
 export default function DealsView() {
@@ -352,10 +353,10 @@ export default function DealsView() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '160px' }}>
               <div style={{
                 width: '160px', height: '160px', borderRadius: '12px', background: 'white',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '1px solid var(--border-primary)'
+                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '1px solid var(--border-primary)', position: 'relative'
               }}>
                 {imageUrl ? (
-                  <img src={imageUrl.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(imageUrl)}` : imageUrl} alt="Product Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  <Image src={imageUrl} alt="Product Preview" fill style={{ objectFit: 'contain', padding: '4px' }} />
                 ) : (
                   <ImageIcon size={40} color="var(--text-muted)" />
                 )}
@@ -539,8 +540,8 @@ export default function DealsView() {
                     <td style={{ maxWidth: '350px' }}>
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                         {deal.imageUrl ? (
-                          <div style={{ width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--border-primary)' }}>
-                            <img src={deal.imageUrl.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(deal.imageUrl)}` : deal.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                          <div style={{ position: 'relative', width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--border-primary)' }}>
+                            <Image src={deal.imageUrl} alt="" fill style={{ objectFit: 'contain', padding: '4px' }} />
                           </div>
                         ) : (
                           <div style={{ width: '40px', height: '40px', borderRadius: '6px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

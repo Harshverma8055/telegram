@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
+import Image from 'next/image';
 import { formatCurrency } from '@/lib/mock-data';
 
 export default function WatchlistView() {
@@ -332,13 +333,15 @@ export default function WatchlistView() {
                     alignItems: 'center', 
                     justifyContent: 'center',
                     overflow: 'hidden',
-                    border: '1px solid var(--border-primary)'
+                    border: '1px solid var(--border-primary)',
+                    position: 'relative'
                   }}>
                     {product.imageUrl ? (
-                      <img 
-                        src={product.imageUrl.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(product.imageUrl)}` : product.imageUrl} 
+                      <Image 
+                        src={product.imageUrl} 
                         alt={product.title} 
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                        fill
+                        style={{ objectFit: 'contain' }}
                       />
                     ) : (
                       <TrendingDown size={32} color="var(--text-muted)" style={{ opacity: 0.3 }} />
