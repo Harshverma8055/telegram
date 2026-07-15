@@ -85,6 +85,7 @@ export default function WishlistView() {
   const [crawlTargetCategory, setCrawlTargetCategory] = useState('');
   const [crawlTargetQuery, setCrawlTargetQuery] = useState('');
   const [crawlDefaultDiscount, setCrawlDefaultDiscount] = useState('50');
+  const [crawlDefaultPriceDrop, setCrawlDefaultPriceDrop] = useState('5');
 
   // Editing state
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -168,6 +169,10 @@ export default function WishlistView() {
 
       if (crawlDefaultDiscount) {
         queryParams.append('defaultDiscount', crawlDefaultDiscount);
+      }
+
+      if (crawlDefaultPriceDrop) {
+        queryParams.append('defaultPriceDrop', crawlDefaultPriceDrop);
       }
 
       if (isManual && crawlTargetCategory && crawlTargetQuery) {
@@ -527,6 +532,28 @@ export default function WishlistView() {
                   placeholder="e.g. 50 (leave empty for none)"
                   value={crawlDefaultDiscount}
                   onChange={(e) => setCrawlDefaultDiscount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '8px',
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+
+              {/* Default Target Price Drop */}
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                  📉 Auto-Publish Price Drop Target (% below current price):
+                </label>
+                <input 
+                  type="number"
+                  placeholder="e.g. 5 (leave empty for none)"
+                  value={crawlDefaultPriceDrop}
+                  onChange={(e) => setCrawlDefaultPriceDrop(e.target.value)}
                   style={{
                     width: '100%',
                     background: 'rgba(0,0,0,0.2)',
