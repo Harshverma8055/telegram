@@ -124,6 +124,8 @@ export async function GET(request: Request) {
         if (pendingDeal) {
           console.log(`📥 Draining queue: Auto-publishing pending deal ${pendingDeal.id} from queue.`);
           await publishToTelegram(pendingDeal.id, TELEGRAM_CHANNEL);
+          // Also post to hostel channel
+          try { await publishToTelegram(pendingDeal.id, '@hosteldeals'); } catch (_) {}
         }
       }
     } catch (drainErr: any) {
@@ -340,16 +342,21 @@ export async function GET(request: Request) {
     }
 
     // Stage 0b: Wishlist Target Price Drop & Discount Checker (Auto-posts targeted wishlist items)
+    // NOTE: Uses its own local timer so Stage 0 (watchlist) latency doesn't starve this stage.
     try {
+      const wishlistStageStart = Date.now();
       console.log('📡 Checking targeted wishlist products for price drops/discounts...');
+      // Only check 15 items per run, ordered by last_updated ASC (rotates through all items)
       const targetedWishlistProducts = await prisma.$queryRawUnsafe<any[]>(`
         SELECT * FROM "WishlistProduct" 
         WHERE "wishlist" = true
+        ORDER BY "last_updated" ASC
+        LIMIT 15
       `);
 
       for (const prod of targetedWishlistProducts) {
-        // Enforce execution limit to keep cron fast
-        if (Date.now() - startTime > 25000) break;
+        // Enforce 8s local limit for wishlist stage
+        if (Date.now() - wishlistStageStart > 8000) break;
 
         const hasCustomTargets = prod.target_price !== null || prod.target_discount !== null;
         console.log(`🔎 Checking wishlist item: ${prod.asin} (Custom Target Price: ${prod.target_price}, Custom Target Discount: ${prod.target_discount}%)`);
@@ -373,11 +380,18 @@ export async function GET(request: Request) {
           hasHitTargetPrice = prod.target_price ? latestPrice <= prod.target_price : false;
           hasHitTargetDiscount = prod.target_discount ? latestDiscount >= prod.target_discount : false;
         } else {
-          // Default Target: 5% drop below the crawled wishlist price
+          // Default Target: 5% drop below crawled price OR ≥50% discount (whichever triggers first)
           const defaultTargetPrice = Math.round(prod.price * 0.95);
           hasHitTargetPrice = latestPrice <= defaultTargetPrice;
-          console.log(`ℹ️ No custom target for ${prod.asin}. Using default 5% drop: ₹${defaultTargetPrice} (crawled: ₹${prod.price}, current: ₹${latestPrice})`);
+          hasHitTargetDiscount = latestDiscount >= 50;
+          console.log(`ℹ️ No custom target for ${prod.asin}. Default: ₹${defaultTargetPrice} or 50% off. Current: ₹${latestPrice} (${latestDiscount}% off)`);
         }
+
+        // Always touch last_updated so this item rotates to the end of the queue
+        await prisma.$executeRawUnsafe(
+          `UPDATE "WishlistProduct" SET "last_updated" = NOW() WHERE "id" = $1`,
+          prod.id
+        );
 
         if (hasHitTargetPrice || hasHitTargetDiscount) {
           console.log(`🎯 WISHLIST TARGET MET for "${prod.title}": ₹${latestPrice} (${latestDiscount}% off)`);
