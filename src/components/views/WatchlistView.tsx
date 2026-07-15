@@ -338,6 +338,8 @@ export default function WatchlistView() {
                       <img 
                         src={product.imageUrl} 
                         alt={product.title} 
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
                         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
                       />
                     ) : (
