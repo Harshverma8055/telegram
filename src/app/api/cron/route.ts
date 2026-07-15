@@ -429,10 +429,15 @@ export async function GET(request: Request) {
 
           if (!isSilent) {
             try {
+              // Publish to main channel
               await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
               console.log(`✅ WISHLIST AUTO-PUBLISHED: "${details.title.substring(0, 30)}..." to ${TELEGRAM_CHANNEL}`);
-            } catch (publishErr) {
-              console.error(`Failed to publish wishlist deal to telegram:`, publishErr);
+
+              // Publish to hostel channel
+              await publishToTelegram(deal.id, '@hosteldeals');
+              console.log(`✅ WISHLIST AUTO-PUBLISHED: "${details.title.substring(0, 30)}..." to @hosteldeals`);
+            } catch (publishErr: any) {
+              console.error(`Failed to publish wishlist deal to telegram:`, publishErr.message);
             }
           }
         }
