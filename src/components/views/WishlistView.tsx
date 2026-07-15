@@ -84,6 +84,7 @@ export default function WishlistView() {
   const [publishingProduct, setPublishingProduct] = useState<any | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishedSuccess, setPublishedSuccess] = useState<string | null>(null);
+  const [targetChannel, setTargetChannel] = useState('@fantasticofffer');
 
   // Notifications
   const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -258,7 +259,7 @@ export default function WishlistView() {
       const res = await fetch('/api/wishlist/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ id, channel: targetChannel })
       });
       const data = await res.json();
       if (data.success) {
@@ -1232,6 +1233,29 @@ export default function WishlistView() {
                   <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'Inter, sans-serif' }}>
                     {`🔥 Spot Deal! 🔥\n\n*${publishingProduct.title.substring(0, 70)}...*\n\n❌ MRP: ₹${publishingProduct.mrp.toLocaleString('en-IN')}\n✅ Deal Price: ₹${publishingProduct.price.toLocaleString('en-IN')} (${Math.round(publishingProduct.discount)}% OFF)\n\n${publishingProduct.prime ? '🚚 Prime Eligible\n' : ''}${publishingProduct.coupon ? '🎟️ Coupon Available\n' : ''}👇 Buy on Amazon (Button Link)`}
                   </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Target Telegram Channel</label>
+                  <input 
+                    type="text" 
+                    value={targetChannel}
+                    onChange={(e) => setTargetChannel(e.target.value)}
+                    placeholder="@channelusername"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.2)',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      padding: '8px 12px',
+                      fontSize: '13px',
+                      outline: 'none'
+                    }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Make sure the Telegram bot is an Administrator in this channel.
+                  </span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

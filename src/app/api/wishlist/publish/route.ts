@@ -5,13 +5,14 @@ import { bot, escapeMarkdown } from '@/lib/telegram';
 import { getAffiliateUrl } from '@/lib/affiliate';
 import { ensureWishlistTableExists } from '@/lib/scrapers/amazon-research';
 
-const TELEGRAM_CHANNEL = '@fantasticofffer';
+const DEFAULT_TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
 
 export async function POST(request: Request) {
   try {
     await ensureWishlistTableExists();
     const body = await request.json();
-    const { id } = body;
+    const { id, channel } = body;
+    const targetChannel = channel || DEFAULT_TELEGRAM_CHANNEL;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'Missing product ID' }, { status: 400 });
@@ -109,13 +110,13 @@ export async function POST(request: Request) {
       };
 
       if (prod.image && prod.image.startsWith('http')) {
-        await bot.sendPhoto(TELEGRAM_CHANNEL, prod.image, {
+        await bot.sendPhoto(targetChannel, prod.image, {
           caption: caption,
           parse_mode: 'Markdown',
           reply_markup: inlineKeyboard
         });
       } else {
-        await bot.sendMessage(TELEGRAM_CHANNEL, caption, {
+        await bot.sendMessage(targetChannel, caption, {
           parse_mode: 'Markdown',
           reply_markup: inlineKeyboard
         });
