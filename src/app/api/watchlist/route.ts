@@ -798,6 +798,8 @@ const studentWatchlistSeed = [
     mrp: 999,
     currentPrice: 799,
     imageUrl: 'https://m.media-amazon.com/images/I/71mJ1L7zBPL._SL1500_.jpg'
+  },
+  {
     asin: 'B0B85327S3',
     title: 'Sony WH-1000XM5 Wireless Active Noise Cancelling Headphones',
     url: 'https://www.amazon.in/dp/B0B85327S3',
