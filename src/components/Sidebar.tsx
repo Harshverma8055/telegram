@@ -26,6 +26,7 @@ import {
   Menu,
   LogOut,
   Clock,
+  ShoppingBag,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -55,6 +56,7 @@ const navGroups: { title: string; items: NavItem[] }[] = [
       { id: 'deals', label: 'All Deals', icon: <Tag size={18} /> },
       { id: 'flash-sales', label: 'Flash Sales', icon: <Zap size={18} /> },
       { id: 'price-drops', label: 'Price Drops', icon: <TrendingUp size={18} /> },
+      { id: 'wishlist', label: 'Wishlist Builder', icon: <ShoppingBag size={18} />, badge: '780 Target' },
       { id: 'coupons', label: 'Coupons', icon: <Link2 size={18} /> },
       { id: 'ai-scoring', label: 'AI Scoring', icon: <Sparkles size={18} /> },
     ],

@@ -169,6 +169,27 @@ export async function DELETE(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const { id, targetPrice } = await request.json();
+    if (!id) {
+      return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
+    }
+
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data: { 
+        targetPrice: targetPrice !== undefined ? (targetPrice === '' || targetPrice === null ? null : parseFloat(targetPrice)) : undefined 
+      }
+    });
+
+    return NextResponse.json({ success: true, product: updatedProduct });
+  } catch (error: any) {
+    console.error('Watchlist PATCH Error:', error);
+    return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
+  }
+}
+
 // Curated list of high-commission, low-cost products perfect for NITJ Jalandhar hostel/college students.
 const studentWatchlistSeed = [
   // 1. SPORTS & GAMES
@@ -777,102 +798,28 @@ const studentWatchlistSeed = [
     mrp: 999,
     currentPrice: 799,
     imageUrl: 'https://m.media-amazon.com/images/I/71mJ1L7zBPL._SL1500_.jpg'
+    asin: 'B0B85327S3',
+    title: 'Sony WH-1000XM5 Wireless Active Noise Cancelling Headphones',
+    url: 'https://www.amazon.in/dp/B0B85327S3',
+    mrp: 34990,
+    currentPrice: 29990,
+    imageUrl: 'https://m.media-amazon.com/images/I/61+OroxMsbL._SL1500_.jpg'
   },
   {
-    asin: 'B09RK8H7L5',
-    title: 'Sparx Men Soft Comfort Hostel Slippers / Sandals',
-    url: 'https://www.amazon.in/dp/B09RK8H7L5',
-    mrp: 549,
-    currentPrice: 399,
-    imageUrl: 'https://m.media-amazon.com/images/I/61c-kF+W9YL._SL1500_.jpg'
-  },
-  {
-    asin: 'B09P3KCDT2',
-    title: 'Sparx Men Comfortable Rubber Daily Wear Flip Flops',
-    url: 'https://www.amazon.in/dp/B09P3KCDT2',
+    asin: 'B000050GET',
+    title: 'Bicycle Standard Playing Cards',
+    url: 'https://www.amazon.in/dp/B000050GET',
     mrp: 399,
     currentPrice: 299,
-    imageUrl: 'https://m.media-amazon.com/images/I/61c-kF+W9YL._SL1500_.jpg'
-  },
-  {
-    asin: 'B08PFB7MLF',
-    title: 'Flite Flip Flops lightweight Slippers for Men',
-    url: 'https://www.amazon.in/dp/B08PFB7MLF',
-    mrp: 249,
-    currentPrice: 179,
-    imageUrl: 'https://m.media-amazon.com/images/I/61c-kF+W9YL._SL1500_.jpg'
-  },
-  {
-    asin: 'B07C5VBYF5',
-    title: 'Fur Jaden Anti-Theft College Backpack with USB Charging Port',
-    url: 'https://www.amazon.in/dp/B07C5VBYF5',
-    mrp: 2000,
-    currentPrice: 699,
-    imageUrl: 'https://m.media-amazon.com/images/I/61eG82dK3hL._SL1500_.jpg'
-  },
-  {
-    asin: 'B08XYTGD2C',
-    title: 'Safari Spartan 30L Waterproof Unisex College Backpack',
-    url: 'https://www.amazon.in/dp/B08XYTGD2C',
-    mrp: 1999,
-    currentPrice: 899,
-    imageUrl: 'https://m.media-amazon.com/images/I/61eG82dK3hL._SL1500_.jpg'
-  },
-  {
-    asin: 'B08HXP2H3V',
-    title: 'Aristocrat Hike 30L Durable Polyester School Backpack',
-    url: 'https://www.amazon.in/dp/B08HXP2H3V',
-    mrp: 1599,
-    currentPrice: 699,
-    imageUrl: 'https://m.media-amazon.com/images/I/61eG82dK3hL._SL1500_.jpg'
-  },
-  {
-    asin: 'B07K6RL4MT',
-    title: 'Alan Jones Cotton Hooded Sweatshirt for Men',
-    url: 'https://www.amazon.in/dp/B07K6RL4MT',
-    mrp: 1499,
-    currentPrice: 699,
-    imageUrl: 'https://m.media-amazon.com/images/I/61n-6iYm25L._SL1200_.jpg'
-  },
-  {
-    asin: 'B085M2RKKV',
-    title: 'Amazon Brand Symbol Cotton Men Comfort Trackpants Joggers',
-    url: 'https://www.amazon.in/dp/B085M2RKKV',
-    mrp: 999,
-    currentPrice: 499,
-    imageUrl: 'https://m.media-amazon.com/images/I/51e2W6p7LqL._SL1000_.jpg'
-  },
-  {
-    asin: 'B09N1J61CS',
-    title: 'Lymio Men Cotton Slim Fit Comfortable Track Pants Joggers',
-    url: 'https://www.amazon.in/dp/B09N1J61CS',
-    mrp: 999,
-    currentPrice: 449,
-    imageUrl: 'https://m.media-amazon.com/images/I/51O18q-gGmL._SL1200_.jpg'
+    imageUrl: 'https://m.media-amazon.com/images/I/61F0+VfN+wL._SL1000_.jpg'
   },
   {
     asin: 'B08F7J4Y4B',
-    title: 'RC.ROYAL CLASS Premium Cotton Ankle Length Socks (Pack of 5 Pairs)',
+    title: 'RC.ROYAL CLASS Premium Cotton Ankle Length Socks',
     url: 'https://www.amazon.in/dp/B08F7J4Y4B',
     mrp: 499,
     currentPrice: 249,
     imageUrl: 'https://m.media-amazon.com/images/I/71p0WfQfPjL._SL1500_.jpg'
-  },
-  {
-    asin: 'B08PPQMR26',
-    title: 'Puma Unisex Metal Logo adjustable Cap',
-    url: 'https://www.amazon.in/dp/B08PPQMR26',
-    mrp: 999,
-    currentPrice: 599,
-    imageUrl: 'https://m.media-amazon.com/images/I/51Kz2csk4zL._SL1000_.jpg'
-  },
-  {
-    asin: 'B08HN6W6F8',
-    title: 'Adidas Unisex Embroidered Adjustable Classic Cap',
-    url: 'https://www.amazon.in/dp/B08HN6W6F8',
-    mrp: 1299,
-    currentPrice: 799,
-    imageUrl: 'https://m.media-amazon.com/images/I/51Kz2csk4zL._SL1000_.jpg'
   }
 ];
 

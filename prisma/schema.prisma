@@ -37,6 +37,8 @@ model Product {
   category      String?
   mrp           Float?
   currentPrice  Float?
+  targetPrice   Float?    // User's target price for alerts
+  targetDiscount Float?   // User's target discount % for alerts
   url           String
   imageUrl      String?
   rating        Float?
@@ -115,3 +117,36 @@ model RecurringPost {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
+
+model WishlistProduct {
+  id            String   @id @default(uuid())
+  asin          String   @unique
+  title         String
+  amazonUrl     String   @map("amazon_url")
+  brand         String?
+  category      String
+  subcategory   String
+  price         Float
+  mrp           Float
+  discount      Float
+  coupon        Boolean  @default(false)
+  rating        Float?
+  reviewCount   Int      @default(0) @map("review_count")
+  availability  String   @default("Available")
+  image         String
+  seller        String?
+  prime         Boolean  @default(false)
+  amazonChoice  Boolean  @default(false) @map("amazon_choice")
+  bestSeller    Boolean  @default(false) @map("best_seller")
+  dealType      String   @default("none") @map("deal_type")
+  priorityScore Float    @default(0) @map("priority_score")
+  buyScore      Float    @default(0) @map("buy_score")
+  studentScore  Float    @default(0) @map("student_score")
+  hostelScore   Float    @default(0) @map("hostel_score")
+  fashionScore  Float    @default(0) @map("fashion_score")
+  giftScore     Float    @default(0) @map("gift_score")
+  affiliateScore Float   @default(0) @map("affiliate_score")
+  wishlist      Boolean  @default(true)
+  lastUpdated   DateTime @default(now()) @map("last_updated")
+}
+

@@ -11,7 +11,11 @@ import {
   Bell,
   Search,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Target,
+  Edit2,
+  Save,
+  X
 } from 'lucide-react';
 import Image from 'next/image';
 import { formatCurrency } from '@/lib/mock-data';
@@ -23,6 +27,11 @@ export default function WatchlistView() {
   const [adding, setAdding] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // Target price editing state
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [targetInput, setTargetInput] = useState<string>('');
+  const [updatingTarget, setUpdatingTarget] = useState(false);
 
   const handlePrepopulate = async () => {
     try {
@@ -100,10 +109,35 @@ export default function WatchlistView() {
         method: 'DELETE'
       });
       if (res.ok) {
-        setProducts(products.filter(p => p.id !== id));
+        fetchProducts();
       }
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUpdateTarget = async (id: string) => {
+    try {
+      setUpdatingTarget(true);
+      const res = await fetch('/api/watchlist', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, targetPrice: targetInput })
+      });
+      
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProducts(products.map(p => p.id === id ? { ...p, targetPrice: data.product.targetPrice } : p));
+        setEditingTargetId(null);
+        setMessage({ type: 'success', text: 'Target price updated successfully!' });
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to update target' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: 'An error occurred while saving target price' });
+    } finally {
+      setUpdatingTarget(false);
     }
   };
 
@@ -318,9 +352,9 @@ export default function WatchlistView() {
                   style={{ 
                     padding: '16px 20px', 
                     display: 'grid', 
-                    gridTemplateColumns: '80px 1fr 150px 180px 100px', 
+                    gridTemplateColumns: '80px 1.5fr 1fr 1.2fr 1.2fr 60px', 
                     alignItems: 'center', 
-                    gap: '24px' 
+                    gap: '20px' 
                   }}
                 >
                   {/* Image */}
@@ -400,6 +434,82 @@ export default function WatchlistView() {
                         MRP {formatCurrency(product.mrp)}
                       </span>
                     )}
+                  </div>
+
+                  {/* Target Price */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {editingTargetId === product.id ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>₹</span>
+                        <input 
+                          type="number"
+                          value={targetInput}
+                          onChange={(e) => setTargetInput(e.target.value)}
+                          placeholder="Amount"
+                          style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '4px',
+                            color: 'white',
+                            padding: '4px 8px',
+                            width: '80px',
+                            fontSize: '14px'
+                          }}
+                          autoFocus
+                          disabled={updatingTarget}
+                        />
+                        <button 
+                          onClick={() => handleUpdateTarget(product.id)}
+                          disabled={updatingTarget}
+                          style={{ background: 'none', border: 'none', color: '#10B981', cursor: 'pointer', padding: '4px' }}
+                        >
+                          <Save size={16} />
+                        </button>
+                        <button 
+                          onClick={() => setEditingTargetId(null)}
+                          disabled={updatingTarget}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '6px',
+                          color: product.targetPrice ? 'var(--text-primary)' : 'var(--text-muted)',
+                          fontSize: '14px',
+                          fontWeight: 600
+                        }}>
+                          <Target size={14} color={product.targetPrice ? '#F59E0B' : 'var(--text-muted)'} />
+                          {product.targetPrice ? formatCurrency(product.targetPrice) : 'No Target'}
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setTargetInput(product.targetPrice?.toString() || '');
+                            setEditingTargetId(product.id);
+                          }}
+                          style={{ 
+                            background: 'none', 
+                            border: 'none', 
+                            color: 'var(--accent-blue)', 
+                            cursor: 'pointer', 
+                            padding: '4px',
+                            opacity: 0.7,
+                            transition: 'opacity 0.2s'
+                          }}
+                          className="hover-opacity-1"
+                          title="Edit Target Price"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </div>
+                    )}
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {product.targetPrice ? 'Will alert if price drops below' : 'Alerts on 10% drop'}
+                    </span>
                   </div>
 
                   {/* Trend Indicator (Sparkline) */}

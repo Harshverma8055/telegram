@@ -253,12 +253,22 @@ export async function GET(request: Request) {
             });
           }
 
-          // Check if price dropped significantly! (e.g. drop of 5% or more compared to previousPrice or MRP)
+          // Check if price dropped significantly! 
           const dropFromPrevious = previousPrice - latestPrice;
           const dropFromMRP = originalPrice - latestPrice;
 
-          if (dropFromPrevious > 0 || (dropFromMRP / originalPrice) >= 0.1) {
-            console.log(`🔥 WATCHLIST PRICE DROP DETECTED for "${prod.title}": ₹${previousPrice} -> ₹${latestPrice}`);
+          // TARGET LOGIC: 
+          // If user set a specific target price, ONLY trigger when it hits that price or lower.
+          // If no target price is set, trigger on any drop or 10% discount from MRP.
+          const hasHitTargetPrice = prod.targetPrice ? latestPrice <= prod.targetPrice : false;
+          const hasHitDefaultDrop = !prod.targetPrice && (dropFromPrevious > 0 || (dropFromMRP / originalPrice) >= 0.1);
+
+          if (hasHitTargetPrice || hasHitDefaultDrop) {
+            if (hasHitTargetPrice) {
+              console.log(`🎯 WATCHLIST TARGET PRICE HIT for "${prod.title}": ₹${latestPrice} (Target: ₹${prod.targetPrice})`);
+            } else {
+              console.log(`🔥 WATCHLIST PRICE DROP DETECTED for "${prod.title}": ₹${previousPrice} -> ₹${latestPrice}`);
+            }
 
             // Add as high-priority candidate!
             candidates.push({
