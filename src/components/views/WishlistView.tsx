@@ -84,7 +84,7 @@ export default function WishlistView() {
   const [publishingProduct, setPublishingProduct] = useState<any | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishedSuccess, setPublishedSuccess] = useState<string | null>(null);
-  const [targetChannel, setTargetChannel] = useState('@fantasticofffer');
+  const [targetChannel, setTargetChannel] = useState('@fantasticofffer,@hosteldeals');
 
   // Notifications
   const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -1236,25 +1236,28 @@ export default function WishlistView() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Target Telegram Channel</label>
-                  <input 
-                    type="text" 
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>Target Telegram Channel(s)</label>
+                  <select
                     value={targetChannel}
                     onChange={(e) => setTargetChannel(e.target.value)}
-                    placeholder="@channelusername"
                     style={{
                       width: '100%',
-                      background: 'rgba(0,0,0,0.2)',
+                      background: 'var(--bg-tertiary)',
                       border: '1px solid var(--border-primary)',
                       borderRadius: '8px',
                       color: 'white',
-                      padding: '8px 12px',
+                      padding: '10px 14px',
                       fontSize: '13px',
-                      outline: 'none'
+                      outline: 'none',
+                      cursor: 'pointer'
                     }}
-                  />
+                  >
+                    <option value="@fantasticofffer,@hosteldeals">Both Channels (Main & Hostel) [Default]</option>
+                    <option value="@fantasticofffer">Main Deals Channel only (@fantasticofffer)</option>
+                    <option value="@hosteldeals">Hostel Deals Channel only (@hosteldeals)</option>
+                  </select>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Make sure the Telegram bot is an Administrator in this channel.
+                    Select where you want this wishlist item to be published.
                   </span>
                 </div>
 

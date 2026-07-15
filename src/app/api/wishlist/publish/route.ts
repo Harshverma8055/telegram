@@ -109,9 +109,17 @@ export async function POST(request: Request) {
         ]
       };
 
-      const targetChannels = [DEFAULT_TELEGRAM_CHANNEL];
-      if (targetChannel && targetChannel !== DEFAULT_TELEGRAM_CHANNEL) {
-        targetChannels.push(targetChannel);
+      const targetChannels: string[] = [];
+      const channelsToProcess = typeof targetChannel === 'string'
+        ? targetChannel.split(',').map((c: string) => c.trim())
+        : Array.isArray(targetChannel)
+          ? targetChannel
+          : [DEFAULT_TELEGRAM_CHANNEL];
+
+      for (const c of channelsToProcess) {
+        if (c && !targetChannels.includes(c)) {
+          targetChannels.push(c);
+        }
       }
 
       for (const chan of targetChannels) {
