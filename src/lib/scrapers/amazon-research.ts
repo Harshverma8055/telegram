@@ -426,7 +426,7 @@ export async function fetchFullAmazonProductDetails(asin: string): Promise<Detai
     }
 
     // Parse rating & reviews
-    let rating: number | null = baseDetails.rating || null;
+    let rating: number | null = (baseDetails as any).rating || null;
     if (!rating) {
       const ratingText = $('.a-icon-alt').first().text().trim() || 
                          $('#acrPopover').attr('title') || '';
