@@ -129,7 +129,7 @@ export default function WishlistView() {
         sortBy,
         sortOrder,
         page: page.toString(),
-        limit: '15'
+        limit: '2000'
       });
       const res = await fetch(`/api/wishlist/products?${queryParams}`);
       const data = await res.json();
@@ -734,10 +734,22 @@ export default function WishlistView() {
               <p style={{ fontSize: '14px', marginTop: '6px' }}>Try running the crawler or clearing filters to populate the wishlist.</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {products.map((product) => (
-                <div 
-                  key={product.id}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '48px' }}>
+              {Object.entries(products.reduce((acc, product) => {
+                const cat = product.category || 'Uncategorized';
+                if (!acc[cat]) acc[cat] = [];
+                acc[cat].push(product);
+                return acc;
+              }, {} as Record<string, any[]>)).map(([category, items]) => (
+                <div key={category}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px', borderBottom: '1px solid var(--border-primary)', paddingBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    {category}
+                    <span style={{ fontSize: '13px', background: 'rgba(99,102,241,0.1)', color: 'var(--accent-primary-light)', padding: '2px 8px', borderRadius: '12px' }}>{items.length} Products</span>
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {items.map((product) => (
+                      <div 
+                        key={product.id}
                   className="glass-card"
                   style={{
                     padding: '20px',
@@ -953,31 +965,9 @@ export default function WishlistView() {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', marginTop: '12px' }}>
-              <button 
-                onClick={() => setPage(p => Math.max(1, p - 1))} 
-                disabled={page === 1}
-                className="btn-ghost"
-                style={{ fontSize: '13px', cursor: 'pointer', color: page === 1 ? 'var(--text-muted)' : 'white' }}
-              >
-                ◀ Previous
-              </button>
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                Page {page} of {totalPages} ({totalProducts} Products)
-              </span>
-              <button 
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
-                disabled={page === totalPages}
-                className="btn-ghost"
-                style={{ fontSize: '13px', cursor: 'pointer', color: page === totalPages ? 'var(--text-muted)' : 'white' }}
-              >
-                Next ▶
-              </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

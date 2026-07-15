@@ -47,14 +47,18 @@ export async function GET(request: Request) {
         countsMap.set(row.category, Number(row.count));
       }
 
-      // Find the first category that hasn't reached its target count
-      let selectedCat = RESEARCH_CATEGORIES.find(c => {
+      // Find all categories that haven't reached their target count
+      const underfilledCats = RESEARCH_CATEGORIES.filter(c => {
         const currentCount = countsMap.get(c.name) || 0;
         return currentCount < c.targetCount;
       });
 
-      // Fallback to random if all are filled
-      if (!selectedCat) {
+      let selectedCat;
+      if (underfilledCats.length > 0) {
+        // Pick a random underfilled category so it spreads out the scraping
+        selectedCat = underfilledCats[Math.floor(Math.random() * underfilledCats.length)];
+      } else {
+        // Fallback to random if all are filled
         selectedCat = RESEARCH_CATEGORIES[Math.floor(Math.random() * RESEARCH_CATEGORIES.length)];
       }
 

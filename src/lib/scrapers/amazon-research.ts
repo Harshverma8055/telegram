@@ -266,31 +266,45 @@ export async function searchAmazonASINs(keyword: string): Promise<string[]> {
   // Try different search URL strategies and User-Agents
   const strategies = [
     {
-      // Strategy 1: Legacy Mobile search (very low bot protection)
       url: `https://www.amazon.in/gp/aw/s/ref=nb_sb_noss?k=${encodeURIComponent(keyword)}`,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-IN,en;q=0.9,en-US;q=0.8,hi;q=0.7',
+        'Sec-Ch-Ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+        'Sec-Ch-Ua-Mobile': '?1',
+        'Sec-Ch-Ua-Platform': '"Android"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'Connection': 'keep-alive'
       }
     },
     {
-      // Strategy 2: Standard search with Discordbot UA
       url: `https://www.amazon.in/s?k=${encodeURIComponent(keyword)}`,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en;q=0.9'
+        'Accept-Language': 'en-IN,en;q=0.9',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site'
       }
     },
     {
-      // Strategy 3: Alternative desktop search format with rotating UA
       url: `https://www.amazon.in/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=${encodeURIComponent(keyword)}`,
       headers: {
         'User-Agent': getRandomUA(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
         'Cache-Control': 'no-cache',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1'
       }
     }
   ];
@@ -396,109 +410,95 @@ export async function fetchFullAmazonProductDetails(asin: string): Promise<Detai
       return null;
     }
 
-    // Now, load the full page to parse secondary details (seller, badges, etc.)
-    // Pose as Discordbot UA first to get clean, quick metadata
-    const response = await axios.get(cleanUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en;q=0.9',
-      },
-      timeout: 10000
-    });
-
-    const $ = cheerio.load(response.data);
-    
-    // Parse brand
-    let brand = $('#bylineInfo').text().replace('Visit the ', '').replace(' Store', '').trim() || null;
-    if (!brand) {
-      brand = $('#brand').text().trim() || null;
-    }
-
-    // Parse coupon
+    let brand: string | null = null;
     let coupon = false;
-    const couponText = $('#applicable_promo_fitment_trigger').text().toLowerCase() ||
-                       $('.promoPriceBlock').text().toLowerCase() ||
-                       $('#couponBadge').text().toLowerCase() ||
-                       $('.coupon-badge-strip').text().toLowerCase();
-    if (couponText.includes('coupon') || couponText.includes('save') || couponText.includes('% off')) {
-      coupon = true;
-    }
-
-    // Parse rating & reviews
     let rating: number | null = (baseDetails as any).rating || null;
-    if (!rating) {
-      const ratingText = $('.a-icon-alt').first().text().trim() || 
-                         $('#acrPopover').attr('title') || '';
-      const rMatch = ratingText.match(/([0-9.]+)\s*out of/i);
-      if (rMatch) rating = parseFloat(rMatch[1]);
-    }
-
     let reviewCount = 0;
-    const reviewsText = $('#acrCustomerReviewText').first().text().trim() || '';
-    if (reviewsText) {
-      const revMatch = reviewsText.replace(/,/g, '').match(/(\d+)\s*ratings?/i);
-      if (revMatch) reviewCount = parseInt(revMatch[1], 10);
-    }
-
-    // Parse availability
     let availability = 'Available';
-    const availabilityText = $('#availability').text().trim().toLowerCase() || '';
-    if (availabilityText.includes('currently unavailable') || availabilityText.includes('out of stock')) {
-      availability = 'Currently Unavailable';
-    } else if (availabilityText.includes('only') && availabilityText.includes('left')) {
-      availability = 'Low Stock';
-    }
-
-    // Parse seller
-    let seller = $('#merchantInfoFeature_div').text().trim() || null;
-    if (seller) {
-      const sMatch = seller.match(/Sold by\s+([^and\n.]+)/i);
-      if (sMatch) seller = sMatch[1].trim();
-      else seller = seller.substring(0, 50).trim();
-    }
-    if (!seller || seller.length < 3) {
-      seller = $('#sellerProfileTriggerId').text().trim() || 'Amazon Retail';
-    }
-
-    // Badges & features
-    const prime = $('.a-icon-prime').length > 0 || 
-                  $('#primeBadge').length > 0 || 
-                  response.data.includes('prime-badge');
-                  
-    const amazonChoice = $('.ac-badge-wrapper').length > 0 || 
-                         response.data.includes('amazon\'s choice') || 
-                         response.data.includes('Choice');
-                         
-    const bestSeller = $('.cat-badge-wrapper').length > 0 || 
-                       response.data.includes('Best Seller') || 
-                       response.data.includes('best-seller-badge');
-
-    // Deal type
+    let seller: string | null = 'Amazon Retail';
+    let prime = false;
+    let amazonChoice = false;
+    let bestSeller = false;
     let dealType = 'none';
-    const dealBadgeText = $('.lightning-deal-badge').text() || 
-                          $('.deal-badge').text() || 
-                          $('#dealBadge').text() || '';
-    if (dealBadgeText.toLowerCase().includes('lightning')) {
-      dealType = 'lightning';
-    } else if (dealBadgeText.toLowerCase().includes('deal of the day')) {
-      dealType = 'deal_of_the_day';
-    } else if (baseDetails.originalPrice > baseDetails.currentPrice) {
-      dealType = 'price_drop';
-    }
+    let features: string[] = [];
+    let description = baseDetails.title;
 
-    // Features / Bullets
-    const features: string[] = [];
-    $('#feature-bullets ul li').each((_, el) => {
-      const text = $(el).find('span').text().trim();
-      if (text && text.length > 5 && !text.includes('Make sure this fits')) {
-        features.push(text);
+    try {
+      const response = await axios.get(cleanUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-IN,en;q=0.9',
+        },
+        timeout: 10000
+      });
+
+      const $ = cheerio.load(response.data);
+      
+      brand = $('#bylineInfo').text().replace('Visit the ', '').replace(' Store', '').trim() || null;
+      if (!brand) brand = $('#brand').text().trim() || null;
+
+      const couponText = $('#applicable_promo_fitment_trigger').text().toLowerCase() ||
+                         $('.promoPriceBlock').text().toLowerCase() ||
+                         $('#couponBadge').text().toLowerCase() ||
+                         $('.coupon-badge-strip').text().toLowerCase();
+      if (couponText.includes('coupon') || couponText.includes('save') || couponText.includes('% off')) {
+        coupon = true;
       }
-    });
 
-    const description = $('#productDescription').text().trim() || 
-                        features.slice(0, 2).join('. ') || 
-                        baseDetails.title;
+      if (!rating) {
+        const ratingText = $('.a-icon-alt').first().text().trim() || $('#acrPopover').attr('title') || '';
+        const rMatch = ratingText.match(/([0-9.]+)\s*out of/i);
+        if (rMatch) rating = parseFloat(rMatch[1]);
+      }
+
+      const reviewsText = $('#acrCustomerReviewText').first().text().trim() || '';
+      if (reviewsText) {
+        const revMatch = reviewsText.replace(/,/g, '').match(/(\d+)\s*ratings?/i);
+        if (revMatch) reviewCount = parseInt(revMatch[1], 10);
+      }
+
+      const availabilityText = $('#availability').text().trim().toLowerCase() || '';
+      if (availabilityText.includes('currently unavailable') || availabilityText.includes('out of stock')) {
+        availability = 'Currently Unavailable';
+      } else if (availabilityText.includes('only') && availabilityText.includes('left')) {
+        availability = 'Low Stock';
+      }
+
+      seller = $('#merchantInfoFeature_div').text().trim() || null;
+      if (seller) {
+        const sMatch = seller.match(/Sold by\s+([^and\n.]+)/i);
+        if (sMatch) seller = sMatch[1].trim();
+        else seller = seller.substring(0, 50).trim();
+      }
+      if (!seller || seller.length < 3) {
+        seller = $('#sellerProfileTriggerId').text().trim() || 'Amazon Retail';
+      }
+
+      prime = $('.a-icon-prime').length > 0 || $('#primeBadge').length > 0 || response.data.includes('prime-badge');
+      amazonChoice = $('.ac-badge-wrapper').length > 0 || response.data.includes('amazon\'s choice') || response.data.includes('Choice');
+      bestSeller = $('.cat-badge-wrapper').length > 0 || response.data.includes('Best Seller') || response.data.includes('best-seller-badge');
+
+      const dealBadgeText = $('.lightning-deal-badge').text() || $('.deal-badge').text() || $('#dealBadge').text() || '';
+      if (dealBadgeText.toLowerCase().includes('lightning')) {
+        dealType = 'lightning';
+      } else if (dealBadgeText.toLowerCase().includes('deal of the day')) {
+        dealType = 'deal_of_the_day';
+      } else if ((baseDetails.originalPrice || 0) > (baseDetails.currentPrice || 0)) {
+        dealType = 'price_drop';
+      }
+
+      $('#feature-bullets ul li').each((_, el) => {
+        const text = $(el).find('span').text().trim();
+        if (text && text.length > 5 && !text.includes('Make sure this fits')) {
+          features.push(text);
+        }
+      });
+
+      description = $('#productDescription').text().trim() || features.slice(0, 2).join('. ') || baseDetails.title;
+    } catch (deepErr: any) {
+      console.warn(`⚠️ [Research] Deep details fetch failed for ${asin} (using base fallback): ${deepErr.message}`);
+    }
 
     const price = baseDetails.currentPrice || 0;
     const mrp = baseDetails.originalPrice || price;
