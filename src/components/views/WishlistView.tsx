@@ -59,6 +59,7 @@ export default function WishlistView() {
   
   // Filters
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState('');
   const [minPrice, setMinPrice] = useState('');
@@ -68,6 +69,14 @@ export default function WishlistView() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProducts, setTotalProducts] = useState(0);
+
+  // Debounce search term to prevent slamming the database on every keystroke
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [search]);
 
   // Crawler Controls
   const [crawling, setCrawling] = useState(false);
@@ -95,7 +104,7 @@ export default function WishlistView() {
   useEffect(() => {
     fetchStats();
     fetchProducts();
-  }, [selectedCategory, selectedSubcategory, minPrice, maxPrice, sortBy, sortOrder, page]);
+  }, [debouncedSearch, selectedCategory, selectedSubcategory, minPrice, maxPrice, sortBy, sortOrder, page]);
 
   useEffect(() => {
     if (logEndRef.current) {
@@ -122,7 +131,7 @@ export default function WishlistView() {
     try {
       setProductsLoading(true);
       const queryParams = new URLSearchParams({
-        search,
+        search: debouncedSearch,
         category: selectedCategory,
         subcategory: selectedSubcategory,
         minPrice,
