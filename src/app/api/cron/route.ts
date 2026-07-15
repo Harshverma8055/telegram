@@ -309,18 +309,21 @@ export async function GET(request: Request) {
       // Slice to first 40 ASINs to keep execution extremely fast and fit in cron limits
       const slicedAsins = amazonDealsAsins.slice(0, 40);
 
-      // Batch query all existing products in one single database call
+      // Batch query products updated/scraped in the last 24 hours
       const existingProducts = await prisma.product.findMany({
         where: {
           platformId: amazonPlatform.id,
-          externalId: { in: slicedAsins }
+          externalId: { in: slicedAsins },
+          lastScrapedAt: {
+            gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+          }
         },
         select: { externalId: true }
       });
       const existingAsinsSet = new Set(existingProducts.map(p => p.externalId));
 
       for (const asin of slicedAsins) {
-        // Skip if already in database (using our fast O(1) set lookup)
+        // Skip if already posted in last 24h
         if (existingAsinsSet.has(asin)) {
           continue;
         }
@@ -375,14 +378,17 @@ export async function GET(request: Request) {
           create: { name: dealInfo.platform.charAt(0).toUpperCase() + dealInfo.platform.slice(1), slug: dealInfo.platform }
         });
 
-        // Skip if already in database
+        // Skip if already posted/scraped in the last 24 hours
         const existingDeal = await prisma.product.findUnique({
           where: { platformId_externalId: { platformId: dealPlatform.id, externalId: dealInfo.externalId } }
         });
 
-        if (existingDeal) {
-          dealsSkippedCount++;
-          continue;
+        if (existingDeal && existingDeal.lastScrapedAt) {
+          const hoursSinceLastScraped = (Date.now() - new Date(existingDeal.lastScrapedAt).getTime()) / (1000 * 60 * 60);
+          if (hoursSinceLastScraped < 24) {
+            dealsSkippedCount++;
+            continue;
+          }
         }
 
         // Avoid duplicate candidates in the same run
