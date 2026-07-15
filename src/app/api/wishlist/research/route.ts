@@ -21,8 +21,10 @@ export async function GET(request: Request) {
     const subcategoryParam = searchParams.get('subcategory');
     const keywordParam = searchParams.get('query');
     const maxToProcessParam = searchParams.get('limit');
+    const defaultDiscountParam = searchParams.get('defaultDiscount');
 
     const limit = maxToProcessParam ? parseInt(maxToProcessParam, 10) : 5; // Safe default limit of 5 new products per run
+    const defaultDiscount = defaultDiscountParam ? parseFloat(defaultDiscountParam) : null;
 
     let targetCategory = '';
     let targetSubcategory = '';
@@ -139,9 +141,9 @@ export async function GET(request: Request) {
             "price", "mrp", "discount", "coupon", "rating", "review_count", "availability", 
             "image", "seller", "prime", "amazon_choice", "best_seller", "deal_type", 
             "priority_score", "buy_score", "student_score", "hostel_score", "fashion_score", 
-            "gift_score", "affiliate_score", "wishlist", "last_updated"
+            "gift_score", "affiliate_score", "wishlist", "target_discount", "last_updated"
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, NOW()
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, NOW()
           ) ON CONFLICT ("asin") DO UPDATE SET
             "title" = EXCLUDED."title",
             "price" = EXCLUDED."price",
@@ -164,6 +166,7 @@ export async function GET(request: Request) {
             "fashion_score" = EXCLUDED."fashion_score",
             "gift_score" = EXCLUDED."gift_score",
             "affiliate_score" = EXCLUDED."affiliate_score",
+            "target_discount" = COALESCE("WishlistProduct"."target_discount", EXCLUDED."target_discount"),
             "last_updated" = NOW()
         `,
           crypto.randomUUID(),
@@ -193,7 +196,8 @@ export async function GET(request: Request) {
           scores.fashionScore,
           scores.giftScore,
           scores.affiliateScore,
-          true
+          true,
+          defaultDiscount
         );
 
         addedCount++;

@@ -84,6 +84,7 @@ export default function WishlistView() {
   const [crawlLog, setCrawlLog] = useState<string[]>([]);
   const [crawlTargetCategory, setCrawlTargetCategory] = useState('');
   const [crawlTargetQuery, setCrawlTargetQuery] = useState('');
+  const [crawlDefaultDiscount, setCrawlDefaultDiscount] = useState('50');
 
   // Editing state
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -164,6 +165,10 @@ export default function WishlistView() {
       const queryParams = new URLSearchParams({
         limit: crawlLimit.toString()
       });
+
+      if (crawlDefaultDiscount) {
+        queryParams.append('defaultDiscount', crawlDefaultDiscount);
+      }
 
       if (isManual && crawlTargetCategory && crawlTargetQuery) {
         queryParams.append('category', crawlTargetCategory);
@@ -510,6 +515,28 @@ export default function WishlistView() {
                   <option value={10}>10 Products (Slow)</option>
                   <option value={20}>20 Products (Bulk)</option>
                 </select>
+              </div>
+
+              {/* Default Target Discount */}
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                  🎯 Auto-Publish Min Discount (%):
+                </label>
+                <input 
+                  type="number"
+                  placeholder="e.g. 50 (leave empty for none)"
+                  value={crawlDefaultDiscount}
+                  onChange={(e) => setCrawlDefaultDiscount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '8px',
+                    fontSize: '13px'
+                  }}
+                />
               </div>
 
               {/* Autopilot Button */}
