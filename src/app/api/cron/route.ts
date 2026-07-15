@@ -77,6 +77,19 @@ function calculatePriorityScore(title: string): number {
   return score;
 }
 
+function isSilentHoursIST(): boolean {
+  const now = new Date();
+  const istString = now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+  const istDate = new Date(istString);
+  const hours = istDate.getHours();
+  const minutes = istDate.getMinutes();
+  
+  // Silent between 11:30 PM (23:30) and 7:00 AM
+  if (hours === 23 && minutes >= 30) return true;
+  if (hours < 7) return true;
+  return false;
+}
+
 // Vercel Cron routes must be a GET request
 export async function GET(request: Request) {
   // Optional: Add a secret key check so random people can't trigger your cron
@@ -86,6 +99,44 @@ export async function GET(request: Request) {
   }
 
   console.log('📡 Starting Vercel Cron: Deal Scraper...');
+
+  const isSilent = isSilentHoursIST();
+
+  // 0. DRAIN QUEUE (Publish saved deals from silent hours if we are in active hours and spaced out)
+  if (!isSilent) {
+    try {
+      const lastPublishedDeal = await prisma.deal.findFirst({
+        where: { isPublished: true },
+        orderBy: { publishedAt: 'desc' }
+      });
+
+      let timeSinceLastPostMin = 999;
+      if (lastPublishedDeal && lastPublishedDeal.publishedAt) {
+        timeSinceLastPostMin = (Date.now() - new Date(lastPublishedDeal.publishedAt).getTime()) / (1000 * 60);
+      }
+
+      // If we haven't posted in the last 15 minutes, fetch the highest score pending deal from the last 12 hours
+      if (timeSinceLastPostMin >= 15) {
+        const pendingDeal = await prisma.deal.findFirst({
+          where: {
+            isPublished: false,
+            affiliateUrl: { not: null },
+            createdAt: {
+              gte: new Date(Date.now() - 12 * 60 * 60 * 1000)
+            }
+          },
+          orderBy: { dealScore: 'desc' }
+        });
+
+        if (pendingDeal) {
+          console.log(`📥 Draining queue: Auto-publishing pending deal ${pendingDeal.id} from queue.`);
+          await publishToTelegram(pendingDeal.id, TELEGRAM_CHANNEL);
+        }
+      }
+    } catch (drainErr: any) {
+      console.error('Error draining deal queue:', drainErr.message);
+    }
+  }
 
   // 1. PROCESS RECURRING/REPOST SCHEDULES
   try {
@@ -595,18 +646,20 @@ export async function GET(request: Request) {
           discountPct: discountPct,
           affiliateUrl: affiliateUrl,
           isGenuine: priceVerified,
-          isPublished: hasWorkingAffiliate, // Only mark published if auto-posting
+          isPublished: hasWorkingAffiliate && !isSilent, // Only mark published if auto-posting AND not silent hours
         }
       });
 
-      // Only auto-publish to Telegram if we have a working affiliate link
-      if (hasWorkingAffiliate) {
+      // Only auto-publish to Telegram if we have a working affiliate link AND it's not silent hours
+      if (hasWorkingAffiliate && !isSilent) {
         try {
           await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
           console.log(`✅ AUTO-PUBLISHED (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
         } catch (err) {
           console.error(`Failed to publish deal:`, err);
         }
+      } else if (hasWorkingAffiliate && isSilent) {
+        console.log(`💤 SILENT HOURS ACTIVE (IST): Saved "${finalTitle.substring(0, 30)}..." to queue without publishing.`);
       } else {
         console.log(`📋 SAVED AS PENDING (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." — Needs manual EarnKaro link before publishing`);
       }
