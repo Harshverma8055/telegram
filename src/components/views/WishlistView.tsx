@@ -735,12 +735,12 @@ export default function WishlistView() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '48px' }}>
-              {Object.entries(products.reduce((acc, product) => {
+              {(Object.entries(products.reduce((acc, product) => {
                 const cat = product.category || 'Uncategorized';
                 if (!acc[cat]) acc[cat] = [];
                 acc[cat].push(product);
                 return acc;
-              }, {} as Record<string, any[]>)).map(([category, items]) => (
+              }, {} as Record<string, any[]>)) as [string, any[]][]).map(([category, items]) => (
                 <div key={category}>
                   <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px', borderBottom: '1px solid var(--border-primary)', paddingBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     {category}
