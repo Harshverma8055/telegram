@@ -534,7 +534,7 @@ export default function WishlistView() {
                 )}
               </button>
 
-              <div style={{ borderTop: '1px solid var(--border-primary)', pt: 2, margin: '8px 0' }} />
+              <div style={{ borderTop: '1px solid var(--border-primary)', paddingTop: 2, margin: '8px 0' }} />
 
               {/* Targeted Manual Search */}
               <h5 style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Targeted Search</h5>
@@ -807,7 +807,7 @@ export default function WishlistView() {
                     </div>
 
                     {/* Price, MRP, Discount */}
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', mt: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
                       <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
                         {formatCurrency(product.price)}
                       </span>
@@ -820,7 +820,7 @@ export default function WishlistView() {
                     </div>
 
                     {/* Badges */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', mt: 1 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: 1 }}>
                       {product.prime && <span style={{ fontSize: '10px', background: 'rgba(6,182,212,0.1)', color: '#22d3ee', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>🚚 Prime</span>}
                       {product.coupon && <span style={{ fontSize: '10px', background: 'rgba(245,158,11,0.1)', color: '#fbbf24', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>🎟️ Coupon</span>}
                       {product.best_seller && <span style={{ fontSize: '10px', background: 'rgba(16,185,129,0.1)', color: '#34d399', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>🏆 Best Seller</span>}
@@ -958,7 +958,7 @@ export default function WishlistView() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', mt: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', marginTop: '12px' }}>
               <button 
                 onClick={() => setPage(p => Math.max(1, p - 1))} 
                 disabled={page === 1}
