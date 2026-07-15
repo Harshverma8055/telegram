@@ -355,7 +355,7 @@ export default function DealsView() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '1px solid var(--border-primary)'
               }}>
                 {imageUrl ? (
-                  <img src={imageUrl} alt="Product Preview" referrerPolicy="no-referrer" crossOrigin="anonymous" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  <img src={imageUrl.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(imageUrl)}` : imageUrl} alt="Product Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                 ) : (
                   <ImageIcon size={40} color="var(--text-muted)" />
                 )}
@@ -540,7 +540,7 @@ export default function DealsView() {
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                         {deal.imageUrl ? (
                           <div style={{ width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--border-primary)' }}>
-                            <img src={deal.imageUrl} alt="" referrerPolicy="no-referrer" crossOrigin="anonymous" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                            <img src={deal.imageUrl.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(deal.imageUrl)}` : deal.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                           </div>
                         ) : (
                           <div style={{ width: '40px', height: '40px', borderRadius: '6px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

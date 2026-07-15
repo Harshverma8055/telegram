@@ -336,10 +336,8 @@ export default function WatchlistView() {
                   }}>
                     {product.imageUrl ? (
                       <img 
-                        src={product.imageUrl} 
+                        src={product.imageUrl.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(product.imageUrl)}` : product.imageUrl} 
                         alt={product.title} 
-                        referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
                         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
                       />
                     ) : (
