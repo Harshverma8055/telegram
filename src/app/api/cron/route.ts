@@ -344,18 +344,18 @@ export async function GET(request: Request) {
       console.log('📡 Checking targeted wishlist products for price drops/discounts...');
       const targetedWishlistProducts = await prisma.$queryRawUnsafe<any[]>(`
         SELECT * FROM "WishlistProduct" 
-        WHERE "wishlist" = true 
-          AND ("target_price" IS NOT NULL OR "target_discount" IS NOT NULL)
+        WHERE "wishlist" = true
       `);
 
       for (const prod of targetedWishlistProducts) {
         // Enforce execution limit to keep cron fast
         if (Date.now() - startTime > 25000) break;
 
-        console.log(`🔎 Checking targeted wishlist item: ${prod.asin} (Target Price: ${prod.target_price}, Target Discount: ${prod.target_discount}%)`);
+        const hasCustomTargets = prod.target_price !== null || prod.target_discount !== null;
+        console.log(`🔎 Checking wishlist item: ${prod.asin} (Custom Target Price: ${prod.target_price}, Custom Target Discount: ${prod.target_discount}%)`);
         const details = await fetchAmazonDetails(prod.asin);
         if (!details) {
-          console.log(`⚠️ Failed to fetch current details for targeted wishlist item ${prod.asin}`);
+          console.log(`⚠️ Failed to fetch current details for wishlist item ${prod.asin}`);
           continue;
         }
 
@@ -366,8 +366,18 @@ export async function GET(request: Request) {
           : 0;
 
         // Check if conditions are met
-        const hasHitTargetPrice = prod.target_price ? latestPrice <= prod.target_price : false;
-        const hasHitTargetDiscount = prod.target_discount ? latestDiscount >= prod.target_discount : false;
+        let hasHitTargetPrice = false;
+        let hasHitTargetDiscount = false;
+
+        if (hasCustomTargets) {
+          hasHitTargetPrice = prod.target_price ? latestPrice <= prod.target_price : false;
+          hasHitTargetDiscount = prod.target_discount ? latestDiscount >= prod.target_discount : false;
+        } else {
+          // Default Target: 5% drop below the crawled wishlist price
+          const defaultTargetPrice = Math.round(prod.price * 0.95);
+          hasHitTargetPrice = latestPrice <= defaultTargetPrice;
+          console.log(`ℹ️ No custom target for ${prod.asin}. Using default 5% drop: ₹${defaultTargetPrice} (crawled: ₹${prod.price}, current: ₹${latestPrice})`);
+        }
 
         if (hasHitTargetPrice || hasHitTargetDiscount) {
           console.log(`🎯 WISHLIST TARGET MET for "${prod.title}": ₹${latestPrice} (${latestDiscount}% off)`);
