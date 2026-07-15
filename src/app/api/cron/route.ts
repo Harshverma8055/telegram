@@ -6,17 +6,10 @@ import { publishToTelegram, sanitizeTitle, bot, escapeMarkdown } from '@/lib/tel
 import { getAffiliateUrl } from '@/lib/affiliate';
 
 const COMPETITOR_CHANNELS = [
-  'LootDealsIndia',
-  'dealsindia',
-  'GrabOnIndiaOfficial',
-  'Bigtricks',
-  'offerbot',
-  'IndiaFreeStuff',
   'amazinglootsdealsoffers',
   'lootdealsk_Alibaba_dc_DealDost',
   'LOOTS_DEAL_OFFER_ONLINE_SHOPPING',
-  'TrickXpert',
-  'under_99_loot_deals'
+  'TrickXpert'
 ];
 const TELEGRAM_CHANNEL = '@fantasticofffer';
 
@@ -209,10 +202,10 @@ export async function GET(request: Request) {
   }
 
   const startTime = Date.now();
-  // Vercel Hobby plan gives 60s for cron-triggered routes.
-  // We use 50s as our safe ceiling to leave buffer for DB writes.
-  const MAX_EXECUTION_TIME_MS = 50000;
-  const MAX_NEW_DEALS_PER_RUN = 8; // Process up to 8 new deals per run
+  // Vercel Hobby plan has a strict 10s execution limit.
+  // We use 8s as our safe ceiling to avoid function timeout.
+  const MAX_EXECUTION_TIME_MS = 8000;
+  const MAX_NEW_DEALS_PER_RUN = 2; // Process up to 2 new deals per run
 
   try {
     let dealsFoundCount = 0;
@@ -403,21 +396,25 @@ export async function GET(request: Request) {
     }
 
     // Stage 1b: Fast Scrape & De-duplicate competitor channels
+    // Pick 1 random competitor channel to stay well within Vercel's 10s timeout
     const shuffledChannels = [...COMPETITOR_CHANNELS].sort(() => Math.random() - 0.5);
+    const channelsToScrape = shuffledChannels.slice(0, 1);
 
-    for (const channel of shuffledChannels) {
+    for (const channel of channelsToScrape) {
       // Check timeout to make sure we leave enough time for Stage 3 (Amazon/Metadata fetching)
-      // Allow up to 35s total for competitor scraping
-      if (Date.now() - startTime > 35000 || candidates.length >= 20) {
+      // Allow up to 3.5s total for competitor scraping
+      if (Date.now() - startTime > 3500 || candidates.length >= 4) {
         break;
       }
 
       const deals = await fetchTelegramDeals(channel);
 
+      let resolvedCount = 0;
       for (const item of deals) {
-        if (Date.now() - startTime > 35000 || candidates.length >= 20) {
+        if (Date.now() - startTime > 3500 || candidates.length >= 4 || resolvedCount >= 4) {
           break;
         }
+        resolvedCount++;
 
         const dealInfo = await resolveDealUrl(item.link, item.content);
         if (!dealInfo) continue;
@@ -634,7 +631,7 @@ export async function GET(request: Request) {
         }
       });
 
-      // Save deal
+      // Save deal (initially unpublished; updated upon successful publish)
       const deal = await prisma.deal.create({
         data: {
           productId: product.id,
@@ -646,7 +643,7 @@ export async function GET(request: Request) {
           discountPct: discountPct,
           affiliateUrl: affiliateUrl,
           isGenuine: priceVerified,
-          isPublished: hasWorkingAffiliate && !isSilent, // Only mark published if auto-posting AND not silent hours
+          isPublished: false,
         }
       });
 
