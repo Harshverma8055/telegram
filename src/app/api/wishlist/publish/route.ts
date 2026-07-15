@@ -109,19 +109,31 @@ export async function POST(request: Request) {
         ]
       };
 
-      if (prod.image && prod.image.startsWith('http')) {
-        await bot.sendPhoto(targetChannel, prod.image, {
-          caption: caption,
-          parse_mode: 'Markdown',
-          reply_markup: inlineKeyboard
-        });
-      } else {
-        await bot.sendMessage(targetChannel, caption, {
-          parse_mode: 'Markdown',
-          reply_markup: inlineKeyboard
-        });
+      const targetChannels = [DEFAULT_TELEGRAM_CHANNEL];
+      if (targetChannel && targetChannel !== DEFAULT_TELEGRAM_CHANNEL) {
+        targetChannels.push(targetChannel);
       }
-      messageSent = true;
+
+      for (const chan of targetChannels) {
+        try {
+          if (prod.image && prod.image.startsWith('http')) {
+            await bot.sendPhoto(chan, prod.image, {
+              caption: caption,
+              parse_mode: 'Markdown',
+              reply_markup: inlineKeyboard
+            });
+          } else {
+            await bot.sendMessage(chan, caption, {
+              parse_mode: 'Markdown',
+              reply_markup: inlineKeyboard
+            });
+          }
+          messageSent = true;
+          console.log(`✅ Manually published to channel: ${chan}`);
+        } catch (postErr: any) {
+          console.error(`Failed to publish manually to channel ${chan}:`, postErr.message);
+        }
+      }
     } else {
       console.log(`[SIMULATION] Publishing Wishlist Product ${prod.asin} to Telegram:\n${caption}`);
     }
