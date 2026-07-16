@@ -124,8 +124,6 @@ export async function GET(request: Request) {
         if (pendingDeal) {
           console.log(`📥 Draining queue: Auto-publishing pending deal ${pendingDeal.id} from queue.`);
           await publishToTelegram(pendingDeal.id, TELEGRAM_CHANNEL);
-          // Also post to hostel channel
-          try { await publishToTelegram(pendingDeal.id, '@hosteldeals'); } catch (_) {}
         }
       }
     } catch (drainErr: any) {
@@ -552,10 +550,6 @@ export async function GET(request: Request) {
         } catch (err) {
           console.error(`Failed to publish deal to main channel:`, err);
         }
-        // Also publish to hostel channel
-        try {
-          await publishToTelegram(deal.id, '@hosteldeals');
-        } catch (_) {}
       } else if (hasWorkingAffiliate && isSilent) {
         console.log(`💤 SILENT HOURS ACTIVE (IST): Saved "${finalTitle.substring(0, 30)}..." to queue without publishing.`);
       } else {
