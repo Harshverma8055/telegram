@@ -97,6 +97,15 @@ export default function WishlistView() {
   const [publishedSuccess, setPublishedSuccess] = useState<string | null>(null);
   const [targetChannel, setTargetChannel] = useState('@fantasticofffer,@hosteldeals');
 
+  // Manual Add Product Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addUrl, setAddUrl] = useState('');
+  const [addCategory, setAddCategory] = useState('');
+  const [addSubcategory, setAddSubcategory] = useState('General');
+  const [addTargetPrice, setAddTargetPrice] = useState('');
+  const [addTargetDiscount, setAddTargetDiscount] = useState('');
+  const [addingProduct, setAddingProduct] = useState(false);
+
   // Notifications
   const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
@@ -225,6 +234,50 @@ export default function WishlistView() {
   };
 
   const handleClearLog = () => setCrawlLog([]);
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addUrl || !addCategory) {
+      setNotification({ type: 'error', text: 'URL/ASIN and Category are required.' });
+      return;
+    }
+
+    try {
+      setAddingProduct(true);
+      const res = await fetch('/api/wishlist/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: addUrl,
+          category: addCategory,
+          subcategory: addSubcategory,
+          targetPrice: addTargetPrice || null,
+          targetDiscount: addTargetDiscount || null
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', text: data.message || 'Product added successfully!' });
+        setShowAddModal(false);
+        // Reset fields
+        setAddUrl('');
+        setAddCategory('');
+        setAddSubcategory('General');
+        setAddTargetPrice('');
+        setAddTargetDiscount('');
+        // Refresh UI data
+        fetchStats();
+        fetchProducts();
+      } else {
+        setNotification({ type: 'error', text: data.error || 'Failed to add product.' });
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', text: err.message || 'An error occurred.' });
+    } finally {
+      setAddingProduct(false);
+    }
+  };
 
   // Save edited product
   const saveProductEdits = async () => {
@@ -784,6 +837,27 @@ export default function WishlistView() {
                 <RotateCcw size={12} /> Clear Filters
               </button>
             )}
+
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="btn-primary"
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'var(--gradient-primary)',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                marginLeft: 'auto'
+              }}
+            >
+              <Plus size={14} /> Add Product
+            </button>
           </div>
 
           {/* Products List Grid */}
@@ -1410,6 +1484,221 @@ export default function WishlistView() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* 5. POPUP MODAL: ADD PRODUCT MANUALLY */}
+      {showAddModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          animation: 'fadeIn 0.2s'
+        }}>
+          <form 
+            onSubmit={handleAddProduct}
+            className="glass-card" 
+            style={{
+              width: '500px',
+              padding: '24px',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Plus size={18} color="var(--accent-primary-light)" /> Add Product to Wishlist
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowAddModal(false)} 
+                style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                Amazon Product URL or ASIN <span style={{ color: 'var(--accent-red-light)' }}>*</span>
+              </label>
+              <input 
+                type="text"
+                placeholder="e.g. B00P2QLCZO or https://www.amazon.in/dp/..."
+                required
+                value={addUrl}
+                onChange={(e) => setAddUrl(e.target.value)}
+                style={{
+                  width: '100%',
+                  background: 'rgba(0,0,0,0.2)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  padding: '10px 12px',
+                  fontSize: '13px'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                  Category <span style={{ color: 'var(--accent-red-light)' }}>*</span>
+                </label>
+                <select
+                  required
+                  value={addCategory}
+                  onChange={(e) => setAddCategory(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '10px 12px',
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">-- Select Category --</option>
+                  {[
+                    'Mobile Accessories',
+                    'Laptop Accessories',
+                    'Hostel Essentials',
+                    'Study Essentials',
+                    'Sports',
+                    "Men's Fashion",
+                    "Women's Fashion",
+                    'Watches',
+                    'Room Decoration',
+                    'Gifts'
+                  ].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                  Subcategory
+                </label>
+                <input 
+                  type="text"
+                  placeholder="e.g. Phone Covers"
+                  value={addSubcategory}
+                  onChange={(e) => setAddSubcategory(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '10px 12px',
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                  🎯 Target Price (₹, optional)
+                </label>
+                <input 
+                  type="number"
+                  placeholder="e.g. 499"
+                  value={addTargetPrice}
+                  onChange={(e) => setAddTargetPrice(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '10px 12px',
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                  🎯 Min Discount (%, optional)
+                </label>
+                <input 
+                  type="number"
+                  placeholder="e.g. 50"
+                  value={addTargetDiscount}
+                  onChange={(e) => setAddTargetDiscount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    padding: '10px 12px',
+                    fontSize: '13px'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+              <button 
+                type="button"
+                onClick={() => setShowAddModal(false)} 
+                disabled={addingProduct}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  background: 'none',
+                  border: '1px solid var(--border-primary)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                disabled={addingProduct}
+                className="btn-primary"
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  background: 'var(--gradient-primary)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {addingProduct ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Adding...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} /> Add to Wishlist
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
-import { ensureWishlistTableExists } from '@/lib/scrapers/amazon-research';
+import { ensureWishlistTableExists, fetchFullAmazonProductDetails, calculateScores } from '@/lib/scrapers/amazon-research';
+import crypto from 'crypto';
 
 // GET: Retrieve and filter wishlist products
 export async function GET(request: Request) {
@@ -107,6 +108,193 @@ export async function GET(request: Request) {
 
   } catch (error: any) {
     console.error('❌ [WishlistProducts] Query Error:', error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+// Helper to extract ASIN
+function extractAsin(input: string): string | null {
+  const trimmed = input.trim();
+  if (trimmed.length === 10 && /^[A-Z0-9]{10}$/i.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+  // Try resolving as URL
+  const match = trimmed.match(/\/(?:dp|gp\/product|aw\/d|gp\/aw\/d)\/([A-Z0-9]{10})/i);
+  if (match && match[1]) {
+    return match[1].toUpperCase();
+  }
+  const qMatch = trimmed.match(/[?&]asin=([A-Z0-9]{10})/i);
+  if (qMatch && qMatch[1]) {
+    return qMatch[1].toUpperCase();
+  }
+  return null;
+}
+
+// POST: Manually add a product to wishlist catalog
+export async function POST(request: Request) {
+  try {
+    await ensureWishlistTableExists();
+    const body = await request.json();
+    const { url, category, subcategory, targetPrice, targetDiscount } = body;
+
+    if (!url) {
+      return NextResponse.json({ success: false, error: 'Amazon URL or ASIN is required' }, { status: 400 });
+    }
+
+    if (!category) {
+      return NextResponse.json({ success: false, error: 'Category is required' }, { status: 400 });
+    }
+
+    const asin = extractAsin(url);
+    if (!asin) {
+      return NextResponse.json({ success: false, error: 'Could not extract a valid 10-character Amazon ASIN from the provided input.' }, { status: 400 });
+    }
+
+    // Check if product already exists
+    const existing = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id", "wishlist" FROM "WishlistProduct" WHERE "asin" = $1 LIMIT 1`,
+      asin
+    );
+
+    const targetSubcategory = subcategory || 'General';
+
+    // Fetch details from Amazon
+    const details = await fetchFullAmazonProductDetails(asin);
+    if (!details) {
+      return NextResponse.json({ success: false, error: 'Failed to fetch details from Amazon (robot check or invalid ASIN).' }, { status: 500 });
+    }
+
+    // Calculate scores
+    const scores = calculateScores(details, category, targetSubcategory);
+
+    const price = details.price;
+    const mrp = details.mrp;
+    const discount = details.discount;
+
+    const parsedTargetPrice = targetPrice ? parseFloat(targetPrice) : null;
+    const parsedTargetDiscount = targetDiscount ? parseFloat(targetDiscount) : null;
+
+    if (existing.length > 0) {
+      // Update existing product to be active on the wishlist
+      await prisma.$executeRawUnsafe(`
+        UPDATE "WishlistProduct" SET
+          "title" = $1,
+          "price" = $2,
+          "mrp" = $3,
+          "discount" = $4,
+          "coupon" = $5,
+          "rating" = $6,
+          "review_count" = $7,
+          "availability" = $8,
+          "image" = $9,
+          "seller" = $10,
+          "prime" = $11,
+          "amazon_choice" = $12,
+          "best_seller" = $13,
+          "deal_type" = $14,
+          "priority_score" = $15,
+          "buy_score" = $16,
+          "student_score" = $17,
+          "hostel_score" = $18,
+          "fashion_score" = $19,
+          "gift_score" = $20,
+          "affiliate_score" = $21,
+          "wishlist" = true,
+          "category" = $22,
+          "subcategory" = $23,
+          "target_price" = COALESCE($24, "target_price"),
+          "target_discount" = COALESCE($25, "target_discount"),
+          "last_updated" = NOW()
+        WHERE "asin" = $26
+      `,
+        details.title,
+        price,
+        mrp,
+        discount,
+        details.coupon,
+        details.rating,
+        details.reviewCount,
+        details.availability,
+        details.image,
+        details.seller,
+        details.prime,
+        details.amazonChoice,
+        details.bestSeller,
+        details.dealType,
+        scores.priorityScore,
+        scores.impulseScore,
+        scores.studentScore,
+        scores.hostelScore,
+        scores.fashionScore,
+        scores.giftScore,
+        scores.affiliateScore,
+        category,
+        targetSubcategory,
+        parsedTargetPrice,
+        parsedTargetDiscount,
+        asin
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Product ${asin} already existed. Updated details and reactivated in wishlist!`,
+        product: { ...details, category, subcategory: targetSubcategory, scores }
+      });
+    }
+
+    // Insert new product
+    const uuid = crypto.randomUUID();
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "WishlistProduct" (
+        "id", "asin", "title", "amazon_url", "brand", "category", "subcategory", 
+        "price", "mrp", "discount", "coupon", "rating", "review_count", "availability", 
+        "image", "seller", "prime", "amazon_choice", "best_seller", "deal_type", 
+        "priority_score", "buy_score", "student_score", "hostel_score", "fashion_score", 
+        "gift_score", "affiliate_score", "wishlist", "target_price", "target_discount", "last_updated"
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW()
+      )
+    `,
+      uuid,
+      asin,
+      details.title,
+      details.amazonUrl,
+      details.brand,
+      category,
+      targetSubcategory,
+      price,
+      mrp,
+      discount,
+      details.coupon,
+      details.rating,
+      details.reviewCount,
+      details.availability,
+      details.image,
+      details.seller,
+      details.prime,
+      details.amazonChoice,
+      details.bestSeller,
+      details.dealType,
+      scores.priorityScore,
+      scores.impulseScore,
+      scores.studentScore,
+      scores.hostelScore,
+      scores.fashionScore,
+      scores.giftScore,
+      scores.affiliateScore,
+      true,
+      parsedTargetPrice,
+      parsedTargetDiscount
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully added "${details.title.substring(0, 45)}..." to wishlist catalog!`,
+      product: { id: uuid, ...details, category, subcategory: targetSubcategory, scores }
+    });
+
+  } catch (error: any) {
+    console.error('❌ [WishlistProducts] POST Error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
