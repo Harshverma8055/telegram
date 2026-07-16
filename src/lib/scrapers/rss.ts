@@ -298,12 +298,61 @@ async function fetchFromPAAPI(asin: string) {
 }
 
 // =====================================================================
-// MASTER AMAZON FETCHER — 4-layer priority system!
-// Layer 0: Amazon PA-API (OFFICIAL — never blocked, 100% accurate)
-// Layer 1: ScraperAPI proxy (if user has premium key)
-// Layer 2: Direct fetch with rotating User-Agent + random delay
-// Layer 3: Amazon mobile site (weaker bot detection)
+// STEALTH AMAZON FETCHER — Multi-identity crawler camouflage system
+// Amazon whitelists social/search crawlers for SEO & link previews.
+// We rotate between 5 trusted crawler identities and race them in
+// parallel so the fastest response wins. Timeout is kept at 4s to
+// avoid killing Vercel's 10s function limit.
 // =====================================================================
+
+// Crawler identities that Amazon trusts (they need these for SEO/sharing)
+const STEALTH_IDENTITIES = [
+  {
+    name: 'googlebot',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-IN,en;q=0.9',
+      'From': 'googlebot(at)googlebot.com',
+    }
+  },
+  {
+    name: 'facebookbot',
+    headers: {
+      'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-IN,en;q=0.5',
+    }
+  },
+  {
+    name: 'telegrambot',
+    headers: {
+      'User-Agent': 'TelegramBot (like TwitterBot)',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-IN,en;q=0.9',
+    }
+  },
+  {
+    name: 'discordbot',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-IN,en;q=0.9',
+    }
+  },
+  {
+    name: 'twitterbot',
+    headers: {
+      'User-Agent': 'Twitterbot/1.0',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-IN,en;q=0.9',
+    }
+  },
+];
+
+// Fast timeout for Vercel — fail fast, try next identity
+const STEALTH_TIMEOUT = 4000;
+
 export async function fetchAmazonDetails(asin: string) {
   // Layer 0: Official Amazon PA-API (THE BEST — if keys are configured)
   const paResult = await fetchFromPAAPI(asin);
@@ -311,84 +360,73 @@ export async function fetchAmazonDetails(asin: string) {
 
   // Layer 1: Premium proxy (if available)
   if (process.env.SCRAPER_API_KEY) {
-    const result = await tryAmazonFetch(asin, 'proxy');
-    if (result) return result;
+    try {
+      const amzUrl = `https://www.amazon.in/dp/${asin}`;
+      const url = `http://api.scraperapi.com?api_key=${process.env.SCRAPER_API_KEY}&url=${encodeURIComponent(amzUrl)}&country_code=in`;
+      const result = await stealthScrape(asin, url, { 'User-Agent': getRandomUA() }, 'proxy');
+      if (result) return result;
+    } catch (_) {}
   }
 
-  // Layer 2: Discordbot preview UA (extremely reliable, bypasses captcha)
-  const discordResult = await tryAmazonFetch(asin, 'discord');
-  if (discordResult) return discordResult;
+  // Layer 2: STEALTH RACE — fire all 5 crawler identities in parallel,
+  // the fastest successful response wins. This is extremely fast because
+  // we don't wait for failures — we race them.
+  const url = `https://www.amazon.in/dp/${asin}`;
+  
+  try {
+    const raceResult = await Promise.any(
+      STEALTH_IDENTITIES.map(identity => 
+        stealthScrape(asin, url, identity.headers, identity.name)
+          .then(result => {
+            if (!result) throw new Error('empty');
+            return result;
+          })
+      )
+    );
+    if (raceResult) return raceResult;
+  } catch (_) {
+    // All identities failed — try mobile as absolute last resort
+  }
 
-  // Layer 3: Direct desktop with rotating UA + delay
-  await randomDelay();
-  const result = await tryAmazonFetch(asin, 'desktop');
-  if (result) return result;
+  // Layer 3: Mobile fallback (different URL structure, weaker detection)
+  try {
+    const mobileResult = await stealthScrape(asin, url, {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
+    }, 'mobile');
+    if (mobileResult) return mobileResult;
+  } catch (_) {}
 
-  // Layer 4: Amazon mobile site (less aggressive blocking)
-  await randomDelay();
-  return tryAmazonFetch(asin, 'mobile');
+  console.log(`❌ All stealth methods failed for ${asin}`);
+  return null;
 }
 
-async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile' | 'discord') {
+async function stealthScrape(
+  asin: string, 
+  url: string, 
+  headers: Record<string, string>, 
+  identityName: string
+) {
   try {
-    let url: string;
-    let headers: Record<string, string>;
-
-    if (mode === 'proxy') {
-      const amzUrl = `https://www.amazon.in/dp/${asin}`;
-      url = `http://api.scraperapi.com?api_key=${process.env.SCRAPER_API_KEY}&url=${encodeURIComponent(amzUrl)}&country_code=in`;
-      headers = { 'User-Agent': getRandomUA() };
-    } else if (mode === 'discord') {
-      url = `https://www.amazon.in/dp/${asin}`;
-      headers = {
-        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en;q=0.9',
-      };
-    } else if (mode === 'mobile') {
-      // Amazon mobile site has weaker bot detection
-      url = `https://www.amazon.in/dp/${asin}`;
-      headers = {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      };
-    } else {
-      url = `https://www.amazon.in/dp/${asin}`;
-      headers = {
-        'User-Agent': getRandomUA(),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Chromium";v="126", "Google Chrome";v="126", "Not=A?Brand";v="8"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-      };
-    }
-
-    const response = await axios.get(url, { headers, timeout: 15000 });
+    const response = await axios.get(url, { 
+      headers, 
+      timeout: STEALTH_TIMEOUT,
+      // Prevent axios from throwing on redirects
+      maxRedirects: 5,
+      validateStatus: (status) => status < 400,
+    });
     const $ = cheerio.load(response.data);
     
     // Extract Title
     let title = $('#productTitle').text().trim();
     if (!title) {
-      // Mobile site sometimes uses a different selector
       title = $('#title').text().trim();
     }
     if (!title) {
       title = $('meta[property="og:title"]').attr('content')?.trim() || '';
     }
-    if (!title) return null; // Captcha or blocked
+    if (!title) return null; // Captcha or blocked — identity didn't work
 
     // Extract Deal Price (try multiple selectors)
     let currentPrice = 0;
@@ -403,6 +441,15 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
       if (priceText) {
         const parsed = parsePrice(priceText);
         if (parsed > 0) { currentPrice = parsed; break; }
+      }
+    }
+
+    // If we got a title but no price, try OG meta (social crawlers get this)
+    if (!currentPrice) {
+      const ogDesc = $('meta[property="og:description"]').attr('content') || '';
+      const priceMatch = ogDesc.match(/₹\s*([\d,]+)/);
+      if (priceMatch) {
+        currentPrice = parsePrice(priceMatch[0]);
       }
     }
 
@@ -439,10 +486,10 @@ async function tryAmazonFetch(asin: string, mode: 'proxy' | 'desktop' | 'mobile'
        originalPrice = Math.round(currentPrice * 1.4);
     }
 
-    console.log(`✅ Amazon ${mode} scrape OK: ${asin} → ₹${currentPrice} (MRP: ₹${originalPrice})`);
+    console.log(`✅ [${identityName}] Amazon scrape OK: ${asin} → ₹${currentPrice} (MRP: ₹${originalPrice})`);
     return { title, currentPrice, originalPrice, imageUrl };
   } catch (error) {
-    console.log(`❌ Amazon ${mode} scrape failed for ${asin}`);
+    // Silent fail — let the race continue with other identities
     return null;
   }
 }
