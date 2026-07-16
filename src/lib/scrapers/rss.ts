@@ -41,11 +41,25 @@ function randomDelay(): Promise<void> {
 
 const customDnsLookup = (hostname: string, options: any, callback: any) => {
   if (hostname === 't.me' || hostname === 'telegram.me') {
-    if (options && options.all) {
-      callback(null, [{ address: '149.154.167.99', family: 4 }]);
-    } else {
-      callback(null, '149.154.167.99', 4);
-    }
+    const resolver = new dns.Resolver();
+    resolver.setServers(['1.1.1.1', '8.8.8.8', '8.8.4.4']);
+    resolver.resolve4(hostname, (err, addresses) => {
+      if (err || !addresses || addresses.length === 0) {
+        // Fallback to hardcoded IP if public DNS fails
+        const fallbackIp = '149.154.167.99';
+        if (options && options.all) {
+          callback(null, [{ address: fallbackIp, family: 4 }]);
+        } else {
+          callback(null, fallbackIp, 4);
+        }
+      } else {
+        if (options && options.all) {
+          callback(null, addresses.map(addr => ({ address: addr, family: 4 })));
+        } else {
+          callback(null, addresses[0], 4);
+        }
+      }
+    });
   } else {
     dns.lookup(hostname, options, callback);
   }

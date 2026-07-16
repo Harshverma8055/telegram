@@ -202,10 +202,10 @@ export async function GET(request: Request) {
   }
 
   const startTime = Date.now();
-  // Vercel Hobby plan has a strict 10s execution limit.
-  // We use 8s as our safe ceiling to avoid function timeout.
-  const MAX_EXECUTION_TIME_MS = 8000;
-  const MAX_NEW_DEALS_PER_RUN = 2; // Process up to 2 new deals per run
+  const isVercel = !!process.env.VERCEL;
+  // Dynamic limits based on environment to prevent starvation on self-hosted/local runs
+  const MAX_EXECUTION_TIME_MS = isVercel ? 8000 : 25000;
+  const MAX_NEW_DEALS_PER_RUN = isVercel ? 2 : 6;
 
   try {
     let dealsFoundCount = 0;
@@ -281,17 +281,18 @@ export async function GET(request: Request) {
     }
 
     // Stage 1b: Fast Scrape & De-duplicate competitor channels
-    // Pick 1 random competitor channel to stay well within timeout
-    // ⚡ FIX: Use a dedicated timer so watchlist/wishlist latency doesn't starve this stage!
+    // Pick 1 random competitor channel on Vercel to stay within limit, otherwise scrape all channels
     const competitorStageStart = Date.now();
     const shuffledChannels = [...COMPETITOR_CHANNELS].sort(() => Math.random() - 0.5);
-    const channelsToScrape = shuffledChannels.slice(0, 1);
+    const channelsToScrape = isVercel ? shuffledChannels.slice(0, 1) : COMPETITOR_CHANNELS;
 
     console.log(`📡 Starting competitor channel scrape. Time since cron start: ${Math.round((Date.now() - startTime) / 1000)}s`);
 
+    const competitorMaxTimeMs = isVercel ? 5000 : 15000;
+    const competitorMaxCandidates = isVercel ? 4 : 12;
+
     for (const channel of channelsToScrape) {
-      // Allow up to 5s for competitor scraping (using its own independent timer)
-      if (Date.now() - competitorStageStart > 5000 || candidates.length >= 4) {
+      if (Date.now() - competitorStageStart > competitorMaxTimeMs || candidates.length >= competitorMaxCandidates) {
         console.log(`⏰ Competitor stage timeout or candidate limit reached.`);
         break;
       }
@@ -301,7 +302,7 @@ export async function GET(request: Request) {
 
       let resolvedCount = 0;
       for (const item of deals) {
-        if (Date.now() - competitorStageStart > 5000 || candidates.length >= 4 || resolvedCount >= 4) {
+        if (Date.now() - competitorStageStart > competitorMaxTimeMs || candidates.length >= competitorMaxCandidates || resolvedCount >= competitorMaxCandidates) {
           break;
         }
         resolvedCount++;
