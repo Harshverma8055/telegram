@@ -11,7 +11,8 @@ const COMPETITOR_CHANNELS = [
   'LOOTS_DEAL_OFFER_ONLINE_SHOPPING',
   'TrickXpert'
 ];
-const TELEGRAM_CHANNEL = '@fantasticofffer';
+const TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
+const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '';
 
 const SUPER_PRIORITY_KEYWORDS = [
   'bag', 'luggage', 'suitcase', 'duffel', 'backpack', 'tote', 'handbag', 'purse',
@@ -85,9 +86,16 @@ function isSilentHoursIST(): boolean {
 
 // Vercel Cron routes must be a GET request
 export async function GET(request: Request) {
-  // Optional: Add a secret key check so random people can't trigger your cron
+  // Support both Authorization header and ?key= query parameter
+  const { searchParams } = new URL(request.url);
+  const key = searchParams.get('key');
   const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  
+  const isAuthorized = !process.env.CRON_SECRET || 
+                       authHeader === `Bearer ${process.env.CRON_SECRET}` || 
+                       key === process.env.CRON_SECRET;
+                       
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -457,19 +465,22 @@ export async function GET(request: Request) {
       }
       processedTitlePrefixes.add(titlePrefix);
 
-      // De-duplicate against recently posted products in the last 24 hours
-      const recentSimilarProduct = await prisma.product.findFirst({
+      // De-duplicate against recently posted deals in the last 24 hours
+      const recentSimilarDeal = await prisma.deal.findFirst({
         where: {
-          title: {
-            startsWith: cleanTitle.substring(0, 30),
-            mode: 'insensitive'
+          product: {
+            title: {
+              startsWith: cleanTitle.substring(0, 30),
+              mode: 'insensitive'
+            }
           },
-          lastScrapedAt: {
+          isPublished: true,
+          publishedAt: {
             gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
           }
         }
       });
-      if (recentSimilarProduct) {
+      if (recentSimilarDeal) {
         console.log(`🚫 SKIPPED: Similar product already posted in the last 24 hours: "${finalTitle}"`);
         dealsSkippedCount++;
         continue;
@@ -548,6 +559,16 @@ export async function GET(request: Request) {
         try {
           await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
           console.log(`✅ AUTO-PUBLISHED (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
+          
+          // Post to Hostel channel if it's a college essential or super priority
+          if (HOSTEL_CHANNEL && (priorityScore >= 30 || dealPlatform.slug === 'amazon')) {
+             try {
+                await publishToTelegram(deal.id, HOSTEL_CHANNEL);
+                console.log(`✅ AUTO-PUBLISHED to Hostel Channel: "${finalTitle.substring(0, 30)}..."`);
+             } catch (hostelErr) {
+                console.error(`Failed to publish to hostel channel:`, hostelErr);
+             }
+          }
         } catch (err) {
           console.error(`Failed to publish deal to main channel:`, err);
         }

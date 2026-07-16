@@ -27,10 +27,17 @@ function isSilentHoursIST(): boolean {
 
 export async function GET(request: Request) {
   const startTime = Date.now();
-
-  // Auth check
+  
+  // Support both Authorization header and ?key= query parameter
+  const { searchParams } = new URL(request.url);
+  const key = searchParams.get('key');
   const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  
+  const isAuthorized = !process.env.CRON_SECRET || 
+                       authHeader === `Bearer ${process.env.CRON_SECRET}` || 
+                       key === process.env.CRON_SECRET;
+                       
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
