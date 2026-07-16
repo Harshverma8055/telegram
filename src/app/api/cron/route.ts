@@ -12,7 +12,7 @@ const COMPETITOR_CHANNELS = [
   'TrickXpert'
 ];
 const TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
-const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '';
+const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
 const SUPER_PRIORITY_KEYWORDS = [
   'bag', 'luggage', 'suitcase', 'duffel', 'backpack', 'tote', 'handbag', 'purse',

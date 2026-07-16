@@ -6,7 +6,7 @@ import { publishToTelegram, sanitizeTitle, bot, escapeMarkdown } from '@/lib/tel
 import { getAffiliateUrl } from '@/lib/affiliate';
 
 const MAIN_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
-const HOSTEL_CHANNEL = '@hosteldeals';
+const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
 // How many wishlist items to check per cron run
 // Keep low (15) so we stay well under Vercel's 10s limit
