@@ -220,257 +220,13 @@ export async function GET(request: Request) {
       priorityScore: number;
     }> = [];
 
-    // Stage 0: Watchlist Price Drop Checker (Professional, future-proof, 100% original)
-    try {
-      console.log('📡 Checking watchlisted products for price drops...');
-      const watchedProducts = await prisma.product.findMany({
-        where: { category: 'watchlist' },
-        include: { platform: true }
-      });
-
-      for (const prod of watchedProducts) {
-        // Limit processing inside cron to keep it under execution limit
-        // Allow up to 15s for watchlist checks (they're important for price drops)
-        if (Date.now() - startTime > 15000) break;
-
-        let latestPrice = 0;
-        let originalPrice = prod.mrp || 0;
-        let latestTitle = prod.title;
-        let latestImage = prod.imageUrl;
-
-        if (prod.platform.slug === 'amazon') {
-          const details = await fetchAmazonDetails(prod.externalId);
-          if (details) {
-            latestPrice = details.currentPrice;
-            originalPrice = details.originalPrice || details.currentPrice;
-            latestTitle = details.title;
-            latestImage = details.imageUrl;
-          }
-        } else {
-          // Scraping non-Amazon watchlisted product
-          try {
-            const response = await fetch(prod.url, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)'
-              }
-            });
-            const html = await response.text();
-            const cheerio = require('cheerio');
-            const $ = cheerio.load(html);
-
-            // Try parsing price from HTML
-            const priceRegex = /(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/i;
-            $('span, div, p').each((_: number, el: any) => {
-              const text = $(el).text().trim();
-              if (text.includes('₹') || text.includes('Rs.')) {
-                const match = text.match(priceRegex);
-                if (match && latestPrice === 0) {
-                  latestPrice = parseFloat(match[1].replace(/,/g, ''));
-                }
-              }
-            });
-          } catch (e) {
-            console.error(`Failed to scrape watchlist details for ${prod.externalId}:`, e);
-          }
-        }
-
-        if (latestPrice > 0) {
-          const previousPrice = prod.currentPrice || latestPrice;
-
-          // Save price history if price changed
-          if (latestPrice !== previousPrice) {
-            await prisma.priceHistory.create({
-              data: {
-                productId: prod.id,
-                price: latestPrice
-              }
-            });
-
-            // Update current price on product
-            await prisma.product.update({
-              where: { id: prod.id },
-              data: {
-                currentPrice: latestPrice,
-                mrp: originalPrice,
-                title: latestTitle,
-                imageUrl: latestImage,
-                lastScrapedAt: new Date()
-              }
-            });
-          }
-
-          // Check if price dropped significantly! 
-          const dropFromPrevious = previousPrice - latestPrice;
-          const dropFromMRP = originalPrice - latestPrice;
-
-          // TARGET LOGIC: 
-          // If user set a specific target price, ONLY trigger when it hits that price or lower.
-          // If no target price is set, trigger on any drop or 10% discount from MRP.
-          const hasHitTargetPrice = prod.targetPrice ? latestPrice <= prod.targetPrice : false;
-          const hasHitDefaultDrop = !prod.targetPrice && (dropFromPrevious > 0 || (dropFromMRP / originalPrice) >= 0.1);
-
-          if (hasHitTargetPrice || hasHitDefaultDrop) {
-            if (hasHitTargetPrice) {
-              console.log(`🎯 WATCHLIST TARGET PRICE HIT for "${prod.title}": ₹${latestPrice} (Target: ₹${prod.targetPrice})`);
-            } else {
-              console.log(`🔥 WATCHLIST PRICE DROP DETECTED for "${prod.title}": ₹${previousPrice} -> ₹${latestPrice}`);
-            }
-
-            // Add as high-priority candidate!
-            candidates.push({
-              dealInfo: {
-                platform: prod.platform.slug,
-                cleanUrl: prod.url,
-                externalId: prod.externalId
-              },
-              item: {
-                title: latestTitle,
-                content: `Price drop alert! Was ₹${previousPrice}, now only ₹${latestPrice}!`,
-                customPrice: latestPrice,
-                customOriginalPrice: originalPrice,
-                imageUrl: latestImage,
-                priceVerified: true
-              },
-              // Price drop watchlists are the highest priority deals
-              priorityScore: 99
-            });
-          }
-        }
-      }
-    } catch (watchlistErr: any) {
-      console.error('Error checking watchlist in cron:', watchlistErr.message);
-    }
-
-    // Stage 0b: Wishlist Target Price Drop & Discount Checker (Auto-posts targeted wishlist items)
-    // NOTE: Uses its own local timer so Stage 0 (watchlist) latency doesn't starve this stage.
-    try {
-      const wishlistStageStart = Date.now();
-      console.log('📡 Checking targeted wishlist products for price drops/discounts...');
-      // Only check 15 items per run, ordered by last_updated ASC (rotates through all items)
-      const targetedWishlistProducts = await prisma.$queryRawUnsafe<any[]>(`
-        SELECT * FROM "WishlistProduct" 
-        WHERE "wishlist" = true
-        ORDER BY "last_updated" ASC
-        LIMIT 15
-      `);
-
-      for (const prod of targetedWishlistProducts) {
-        // Enforce 8s local limit for wishlist stage
-        if (Date.now() - wishlistStageStart > 8000) break;
-
-        const hasCustomTargets = prod.target_price !== null || prod.target_discount !== null;
-        console.log(`🔎 Checking wishlist item: ${prod.asin} (Custom Target Price: ${prod.target_price}, Custom Target Discount: ${prod.target_discount}%)`);
-        const details = await fetchAmazonDetails(prod.asin);
-        if (!details) {
-          console.log(`⚠️ Failed to fetch current details for wishlist item ${prod.asin}`);
-          continue;
-        }
-
-        const latestPrice = details.currentPrice;
-        const originalPrice = details.originalPrice || prod.mrp || latestPrice;
-        const latestDiscount = originalPrice > latestPrice 
-          ? Math.round(((originalPrice - latestPrice) / originalPrice) * 100) 
-          : 0;
-
-        // Check if conditions are met
-        let hasHitTargetPrice = false;
-        let hasHitTargetDiscount = false;
-
-        if (hasCustomTargets) {
-          hasHitTargetPrice = prod.target_price ? latestPrice <= prod.target_price : false;
-          hasHitTargetDiscount = prod.target_discount ? latestDiscount >= prod.target_discount : false;
-        } else {
-          // Default Target: 5% drop below crawled price OR ≥50% discount (whichever triggers first)
-          const defaultTargetPrice = Math.round(prod.price * 0.95);
-          hasHitTargetPrice = latestPrice <= defaultTargetPrice;
-          hasHitTargetDiscount = latestDiscount >= 50;
-          console.log(`ℹ️ No custom target for ${prod.asin}. Default: ₹${defaultTargetPrice} or 50% off. Current: ₹${latestPrice} (${latestDiscount}% off)`);
-        }
-
-        // Always touch last_updated so this item rotates to the end of the queue
-        await prisma.$executeRawUnsafe(
-          `UPDATE "WishlistProduct" SET "last_updated" = NOW() WHERE "id" = $1`,
-          prod.id
-        );
-
-        if (hasHitTargetPrice || hasHitTargetDiscount) {
-          console.log(`🎯 WISHLIST TARGET MET for "${prod.title}": ₹${latestPrice} (${latestDiscount}% off)`);
-
-          const affiliateUrl = getAffiliateUrl('amazon', prod.amazon_url, prod.asin);
-
-          const amazonPlatform = await prisma.platform.upsert({
-            where: { slug: 'amazon' },
-            update: {},
-            create: { name: 'Amazon', slug: 'amazon' }
-          });
-
-          // Insert into main Product tracker
-          const product = await prisma.product.upsert({
-            where: {
-              platformId_externalId: {
-                platformId: amazonPlatform.id,
-                externalId: prod.asin
-              }
-            },
-            update: {
-              title: sanitizeTitle(details.title),
-              url: prod.amazon_url,
-              currentPrice: latestPrice,
-              imageUrl: details.imageUrl || prod.image,
-              lastScrapedAt: new Date()
-            },
-            create: {
-              platformId: amazonPlatform.id,
-              externalId: prod.asin,
-              title: sanitizeTitle(details.title),
-              url: prod.amazon_url,
-              currentPrice: latestPrice,
-              imageUrl: details.imageUrl || prod.image,
-            }
-          });
-
-          // Create active deal
-          const deal = await prisma.deal.create({
-            data: {
-              productId: product.id,
-              platformId: amazonPlatform.id,
-              dealType: 'price_drop',
-              dealScore: 99,
-              dealPrice: latestPrice,
-              originalPrice: originalPrice,
-              discountPct: latestDiscount,
-              affiliateUrl: affiliateUrl,
-              isGenuine: true,
-              isPublished: false
-            }
-          });
-
-          // Toggle wishlist flag so we don't spam the target checker
-          await prisma.$executeRawUnsafe(
-            `UPDATE "WishlistProduct" SET "wishlist" = false, "last_updated" = NOW() WHERE "id" = $1`,
-            prod.id
-          );
-
-          if (!isSilent) {
-            try {
-              // Publish to main channel
-              await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
-              console.log(`✅ WISHLIST AUTO-PUBLISHED: "${details.title.substring(0, 30)}..." to ${TELEGRAM_CHANNEL}`);
-
-              // Publish to hostel channel
-              await publishToTelegram(deal.id, '@hosteldeals');
-              console.log(`✅ WISHLIST AUTO-PUBLISHED: "${details.title.substring(0, 30)}..." to @hosteldeals`);
-            } catch (publishErr: any) {
-              console.error(`Failed to publish wishlist deal to telegram:`, publishErr.message);
-            }
-          }
-        }
-      }
-    } catch (wishlistErr: any) {
-      console.error('Error checking targeted wishlist products in cron:', wishlistErr.message);
-    }
+    // NOTE: Watchlist (Stage 0) and Wishlist (Stage 0b) are handled by the dedicated
+    // /api/cron-wishlist endpoint. They were removed from here because they consumed
+    // 15-23 seconds, causing Vercel Hobby's 10s function timeout to kill the process
+    // before competitor channel scraping (the core job of this cron) could even start.
 
     // Stage 1a: Direct Amazon Deals Page Scraper (Safe, official-source, no competitor copying)
+    const amazonStageStart = Date.now();
     try {
       console.log('📡 Scraping Amazon Deals page for direct deals...');
       const amazonDealsAsins = await scrapeAmazonDealsPage();
@@ -527,22 +283,27 @@ export async function GET(request: Request) {
     }
 
     // Stage 1b: Fast Scrape & De-duplicate competitor channels
-    // Pick 1 random competitor channel to stay well within Vercel's 10s timeout
+    // Pick 1 random competitor channel to stay well within timeout
+    // ⚡ FIX: Use a dedicated timer so watchlist/wishlist latency doesn't starve this stage!
+    const competitorStageStart = Date.now();
     const shuffledChannels = [...COMPETITOR_CHANNELS].sort(() => Math.random() - 0.5);
     const channelsToScrape = shuffledChannels.slice(0, 1);
 
+    console.log(`📡 Starting competitor channel scrape. Time since cron start: ${Math.round((Date.now() - startTime) / 1000)}s`);
+
     for (const channel of channelsToScrape) {
-      // Check timeout to make sure we leave enough time for Stage 3 (Amazon/Metadata fetching)
-      // Allow up to 3.5s total for competitor scraping
-      if (Date.now() - startTime > 3500 || candidates.length >= 4) {
+      // Allow up to 5s for competitor scraping (using its own independent timer)
+      if (Date.now() - competitorStageStart > 5000 || candidates.length >= 4) {
+        console.log(`⏰ Competitor stage timeout or candidate limit reached.`);
         break;
       }
 
       const deals = await fetchTelegramDeals(channel);
+      console.log(`📡 Fetched ${deals.length} deals from @${channel}`);
 
       let resolvedCount = 0;
       for (const item of deals) {
-        if (Date.now() - startTime > 3500 || candidates.length >= 4 || resolvedCount >= 4) {
+        if (Date.now() - competitorStageStart > 5000 || candidates.length >= 4 || resolvedCount >= 4) {
           break;
         }
         resolvedCount++;
@@ -592,12 +353,17 @@ export async function GET(request: Request) {
     candidates.sort((a, b) => b.priorityScore - a.priorityScore);
 
     // Stage 3: Process the best deals — ALWAYS fetch fresh data from the SOURCE, never trust competitor text
+    // ⚡ FIX: Use a dedicated timer so watchlist/wishlist latency doesn't prevent deal processing!
+    const processingStageStart = Date.now();
+    const PROCESSING_MAX_MS = MAX_EXECUTION_TIME_MS; // Use the main timeout budget
     const topCandidates = candidates.slice(0, MAX_NEW_DEALS_PER_RUN);
     const processedTitlePrefixes = new Set<string>();
 
+    console.log(`📡 Starting Stage 3 deal processing. ${topCandidates.length} candidates. Time since cron start: ${Math.round((Date.now() - startTime) / 1000)}s`);
+
     for (const candidate of topCandidates) {
-      if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
-        console.log('⏰ Reaching Vercel 10s timeout limit. Stopping early to save progress.');
+      if (Date.now() - processingStageStart > PROCESSING_MAX_MS) {
+        console.log('⏰ Stage 3 processing time limit reached. Stopping to save progress.');
         timeLimitReached = true;
         break;
       }
@@ -784,8 +550,12 @@ export async function GET(request: Request) {
           await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
           console.log(`✅ AUTO-PUBLISHED (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
         } catch (err) {
-          console.error(`Failed to publish deal:`, err);
+          console.error(`Failed to publish deal to main channel:`, err);
         }
+        // Also publish to hostel channel
+        try {
+          await publishToTelegram(deal.id, '@hosteldeals');
+        } catch (_) {}
       } else if (hasWorkingAffiliate && isSilent) {
         console.log(`💤 SILENT HOURS ACTIVE (IST): Saved "${finalTitle.substring(0, 30)}..." to queue without publishing.`);
       } else {
