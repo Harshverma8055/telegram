@@ -66,7 +66,7 @@ export async function POST(request: Request) {
           continue;
         }
 
-        const price = details.price || 0;
+        const price = details.currentPrice || 0;
         const mrp = details.originalPrice || price;
         const discount = mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
 

@@ -296,7 +296,7 @@ export async function fetchAmazonDetails(asin: string): Promise<AmazonProductDet
   try {
     const raceResult = await Promise.any(
       STEALTH_IDENTITIES.map(identity =>
-        stealthScrape(asin, url, identity.headers, identity.name)
+        stealthScrape(asin, url, identity.headers as Record<string, string>, identity.name)
           .then(result => {
             if (!result) throw new Error('empty');
             return result;
