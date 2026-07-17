@@ -17,7 +17,8 @@ const COMPETITOR_CHANNELS = [
   'lootdealsk_Alibaba_dc_DealDost',
   'LOOTS_DEAL_OFFER_ONLINE_SHOPPING',
   'TrickXpert',
-  'under_99_loot_deals'
+  'under_99_loot_deals',
+  'rapiddeals_unlimited'
 ];
 
 // Target Distribution Channels

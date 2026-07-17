@@ -28,7 +28,8 @@ async function main() {
     'amazinglootsdealsoffers',
     'lootdealsk_Alibaba_dc_DealDost',
     'LOOTS_DEAL_OFFER_ONLINE_SHOPPING',
-    'TrickXpert'
+    'TrickXpert',
+    'rapiddeals_unlimited'
   ];
   for (const c of channels) {
     await testChannel(c);

@@ -9,7 +9,8 @@ const COMPETITOR_CHANNELS = [
   'amazinglootsdealsoffers',
   'lootdealsk_Alibaba_dc_DealDost',
   'LOOTS_DEAL_OFFER_ONLINE_SHOPPING',
-  'TrickXpert'
+  'TrickXpert',
+  'rapiddeals_unlimited'
 ];
 const TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
