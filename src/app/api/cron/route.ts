@@ -559,16 +559,8 @@ export async function GET(request: Request) {
         try {
           await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
           console.log(`✅ AUTO-PUBLISHED (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
-          
-          // Post to Hostel channel if it's a college essential or super priority
-          if (HOSTEL_CHANNEL && (priorityScore >= 30 || dealPlatform.slug === 'amazon')) {
-             try {
-                await publishToTelegram(deal.id, HOSTEL_CHANNEL);
-                console.log(`✅ AUTO-PUBLISHED to Hostel Channel: "${finalTitle.substring(0, 30)}..."`);
-             } catch (hostelErr) {
-                console.error(`Failed to publish to hostel channel:`, hostelErr);
-             }
-          }
+          // NOTE: Hostel channel posting is handled independently by /api/cron-hostel
+          // using the Smart Student Filter. Do NOT add hostel posting here.
         } catch (err) {
           console.error(`Failed to publish deal to main channel:`, err);
         }

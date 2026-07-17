@@ -27,13 +27,25 @@ crawler camouflage system that races 5 trusted bot identities in parallel.
 - **DO NOT** suggest PA-API or paid scrapers as alternatives. This free
   stealth system is the intended and working solution.
 
+### `src/lib/hostel-filter.ts`
+**What it does:** Smart Student Filter that scores deals 0-100 based on
+product category, price affordability, and discount level.
+
+**SAFE changes in this file:**
+- Adding new keywords to existing category arrays
+- Adjusting STUDENT_SCORE_THRESHOLD (default: 40)
+
+**UNSAFE changes:**
+- Removing categories or penalty groups
+- Changing the scoring formula structure
+- Removing the flash deal override logic
+
 ### `src/lib/telegram.ts`
 **What it does:** Formats and sends deal messages to Telegram channels.
 
 **Why it must not be changed:**
 - The message formatting, image handling, and affiliate link placement
   are carefully tested to work with Telegram's API.
-- Changing the bot initialization can break ALL channel posting.
 
 ---
 
@@ -43,6 +55,7 @@ crawler camouflage system that races 5 trusted bot identities in parallel.
 src/
 ├── lib/
 │   ├── stealth-scraper.ts    🔒 PROTECTED — Amazon price fetcher
+│   ├── hostel-filter.ts      🔒 PROTECTED — Student deal scoring
 │   ├── telegram.ts           🔒 PROTECTED — Telegram message sender
 │   ├── affiliate.ts          ✅ SAFE — Affiliate link generator
 │   ├── prisma.ts             ✅ SAFE — Database client
@@ -53,83 +66,81 @@ src/
 │   └── api/
 │       ├── cron/
 │       │   └── route.ts      ⚠️ CAREFUL — Main deal scraper cron
+│       │                      Posts ONLY to @fantasticofffer
+│       ├── cron-hostel/
+│       │   └── route.ts      ⚠️ CAREFUL — Hostel channel filter cron
+│       │                      Posts ONLY to @hosteldeals
 │       ├── cron-wishlist/
 │       │   └── route.ts      ⚠️ CAREFUL — Wishlist price tracker cron
+│       │                      Posts ONLY to @hosteldeals
 │       ├── deals/             ✅ SAFE — Dashboard API endpoints
 │       ├── watchlist/         ✅ SAFE — Watchlist API endpoints
 │       └── wishlist/          ✅ SAFE — Wishlist API endpoints
 ├── components/
-│   └── views/                 ✅ SAFE — UI components (can modify freely)
+│   └── views/                 ✅ SAFE — UI components
 └── types/
-    └── index.ts               ✅ SAFE — TypeScript type definitions
+    └── index.ts               ✅ SAFE — TypeScript types
 ```
-
-### Legend:
-- 🔒 **PROTECTED** = Do NOT touch these files under any circumstances
-- ⚠️ **CAREFUL** = You can modify, but be very careful with the scraping
-  logic. Only change business logic (like discount thresholds, channel
-  names, message text), NOT the scraping/fetching mechanism.
-- ✅ **SAFE** = You can modify these freely for features, UI changes, etc.
 
 ---
 
-## 🔄 HOW THE AUTOMATION WORKS
+## 🔄 HOW THE 3-BOT SYSTEM WORKS
 
-### 1. Main Cron (`/api/cron`) — Runs every 5 minutes
+### Bot 1: Main Channel (`/api/cron` → `@fantasticofffer`)
+- Runs every **5 minutes**
 - Scrapes competitor Telegram channels for new deals
 - Resolves shortlinks to find Amazon/Flipkart product IDs
 - Creates affiliate links and saves deals to database
-- Auto-publishes good deals to `@fantasticofffer` (main channel)
-- Auto-publishes college/hostel deals to `@hosteldeals` (hostel channel)
+- Publishes to `@fantasticofffer` ONLY
+- Does NOT touch `@hosteldeals`
 
-### 2. Wishlist Cron (`/api/cron-wishlist`) — Runs every 10 minutes
-- Picks the 15 oldest-checked wishlist products from the database
-- Fetches live Amazon prices using `stealth-scraper.ts`
-- Checks if price dropped below target (or discount >= 50%)
-- If target met → publishes deal to BOTH Telegram channels
-- Marks the product as triggered so it's not re-posted
+### Bot 2: Hostel Filter (`/api/cron-hostel` → `@hosteldeals`)
+- Runs every **8 minutes**
+- Reads deals ALREADY saved to database by Bot 1
+- Runs each deal through the Smart Student Filter (hostel-filter.ts)
+- Only posts deals scoring 40+ to `@hosteldeals`
+- Flash deals (70%+ off under ₹999) are ALWAYS posted
+- Irrelevant items (AC, baby, furniture) are auto-rejected
+
+### Bot 3: Wishlist Tracker (`/api/cron-wishlist` → `@hosteldeals`)
+- Runs every **10 minutes**
+- Checks Amazon prices for wishlist products using stealth-scraper.ts
+- Posts price drops to `@hosteldeals` ONLY
 - Processes 3 items in parallel for speed
 
-### 3. Stealth Scraper (`stealth-scraper.ts`) — The Core Engine
-- Fires 5 crawler identities simultaneously (Googlebot, Facebook, etc.)
-- Uses `Promise.any()` — first successful response wins
-- 4-second timeout per identity to stay within Vercel limits
-- Falls back to mobile UA if all 5 identities fail
+### Why they are SEPARATE:
+- Changes to Bot 1 CANNOT break Bot 2 or Bot 3
+- Changes to Bot 2 CANNOT break Bot 1 or Bot 3
+- Each bot can be tested independently by visiting its URL
+- If one bot fails, the others keep running
 
 ---
 
 ## 🛡️ CHANNEL CONFIGURATION
 
-| Channel | Handle | Purpose |
-|---------|--------|---------|
-| Main | `@fantasticofffer` | All deals (main audience) |
-| Hostel | `@hosteldeals` | College/hostel targeted deals |
-
-Both channels use the **same Telegram bot token**. The bot must be added
-as an **admin** in both channels.
-
-Channel handles are configured in:
-- `src/app/api/cron/route.ts` (lines 14-15)
-- `src/app/api/cron-wishlist/route.ts` (lines 8-9)
+| Channel | Handle | Fed by |
+|---------|--------|--------|
+| Main | `@fantasticofffer` | Bot 1 (main cron) |
+| Hostel | `@hosteldeals` | Bot 2 (hostel filter) + Bot 3 (wishlist) |
 
 ---
 
-## ✅ SAFE CHANGES (Things you CAN modify)
+## ✅ SAFE CHANGES
 
-1. **UI/Dashboard** — Any file in `src/components/` is safe to change
-2. **Discount thresholds** — Change the `50` in cron-wishlist for min discount
-3. **Channel names** — Update `@fantasticofffer` or `@hosteldeals` strings
-4. **Keyword lists** — SUPER_PRIORITY_KEYWORDS, COLLEGE_ESSENTIALS in cron
-5. **Silent hours** — Change the 11:30 PM to 7:00 AM quiet period
-6. **API endpoints** — Add new dashboard/API routes freely
-7. **Database schema** — Add new Prisma models as needed
+1. **UI/Dashboard** — Any file in `src/components/`
+2. **Keyword lists** — Add keywords in hostel-filter.ts categories
+3. **Discount thresholds** — Change STUDENT_SCORE_THRESHOLD in hostel-filter.ts
+4. **Channel names** — Update handle strings in cron files
+5. **API endpoints** — Add new dashboard routes freely
+6. **Database schema** — Add new Prisma models as needed
+7. **Affiliate links** — Edit src/lib/affiliate.ts
 
-## ❌ DANGEROUS CHANGES (Things that WILL break the bot)
+## ❌ DANGEROUS CHANGES
 
 1. ❌ Modifying `stealth-scraper.ts` in ANY way
 2. ❌ Changing axios timeout values in scraping code
-3. ❌ Removing or modifying the `Promise.any()` parallel race
-4. ❌ Adding `randomDelay()` calls inside the fetch pipeline
+3. ❌ Removing the `Promise.any()` parallel race
+4. ❌ Adding `randomDelay()` inside the fetch pipeline
 5. ❌ Replacing the stealth system with PA-API or paid scrapers
-6. ❌ Changing User-Agent strings in crawler identities
-7. ❌ Making the cron process items one-at-a-time instead of in parallel
+6. ❌ Making any cron post to BOTH channels (they are separated!)
+7. ❌ Adding hostel posting logic back into `/api/cron/route.ts`

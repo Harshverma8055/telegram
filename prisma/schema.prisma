@@ -73,12 +73,15 @@ model Deal {
   bankOffer     String?
   isGenuine     Boolean   @default(true)
   isPublished   Boolean   @default(false)
+  isPublishedHostel Boolean @default(false)
   affiliateUrl  String?
   clicks        Int       @default(0)
   conversions   Int       @default(0)
   revenue       Float     @default(0)
   expiresAt     DateTime?
   publishedAt   DateTime?
+  publishedHostelAt DateTime?
+  studentScore  Int?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }

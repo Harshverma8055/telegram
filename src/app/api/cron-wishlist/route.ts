@@ -5,7 +5,8 @@ import { fetchAmazonDetails } from '@/lib/stealth-scraper';
 import { publishToTelegram, sanitizeTitle, bot, escapeMarkdown } from '@/lib/telegram';
 import { getAffiliateUrl } from '@/lib/affiliate';
 
-const MAIN_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
+// Wishlist deals go ONLY to hostel channel (student-curated products)
+// Main channel has its own independent cron at /api/cron
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
 // How many wishlist items to check per cron run
@@ -190,17 +191,9 @@ export async function GET(request: Request) {
           prod.id
         );
 
-        // Publish to Telegram (both channels)
+        // Publish to hostel channel ONLY (wishlist = student products)
+        // NOTE: Do NOT add main channel here. Main channel has /api/cron.
         if (!isSilent) {
-          try {
-            await publishToTelegram(deal.id, MAIN_CHANNEL);
-            logs.push(`✅ Published to ${MAIN_CHANNEL}`);
-            console.log(`✅ [cron-wishlist] Published to ${MAIN_CHANNEL}: ${prod.asin}`);
-          } catch (err: any) {
-            logs.push(`❌ Failed to publish to ${MAIN_CHANNEL}: ${err.message}`);
-            console.error(`[cron-wishlist] Publish error (main):`, err.message);
-          }
-
           try {
             await publishToTelegram(deal.id, HOSTEL_CHANNEL);
             logs.push(`✅ Published to ${HOSTEL_CHANNEL}`);
