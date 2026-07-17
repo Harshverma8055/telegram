@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import prisma from '@/lib/prisma';
+import { calculateStudentScore, type DealInput } from '@/lib/hostel-filter';
 
 // Initialize bot if token is available in env
 const token = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -15,7 +16,7 @@ interface DealMessageParams {
   imageUrl?: string | null;
   score: number;
   bankOffer?: string | null;
-  isVerified?: boolean; // NEW: Whether price data is from Amazon directly
+  isVerified?: boolean; // Whether price data is from Amazon directly
 }
 
 // =====================================================================
@@ -51,6 +52,9 @@ export function escapeMarkdown(text: string): string {
     .replace(/`/g, '\\`');
 }
 
+// =====================================================================
+// DEAL CAPTION GENERATOR — Creates engaging Telegram post text
+// =====================================================================
 export function generateDealCaption(deal: DealMessageParams, platform: 'telegram' | 'whatsapp' = 'telegram'): string {
   const cleanTitle = sanitizeTitle(deal.title);
   const escapedTitle = platform === 'telegram' ? escapeMarkdown(cleanTitle) : cleanTitle;
@@ -118,6 +122,80 @@ export function generateDealCaption(deal: DealMessageParams, platform: 'telegram
   return msg;
 }
 
+// =====================================================================
+// 🎓 HOSTEL CHANNEL CAPTION — Enhanced with student tags & badges
+// This format is used ONLY for @hosteldeals posts.
+// It adds category tags, deal badges, and student-friendly messaging.
+// =====================================================================
+export function generateHostelCaption(deal: DealMessageParams): string {
+  const cleanTitle = sanitizeTitle(deal.title);
+  const escapedTitle = escapeMarkdown(cleanTitle);
+  
+  // Get student filter data for category & badge
+  const filterResult = calculateStudentScore({
+    title: cleanTitle,
+    price: deal.dealPrice,
+    originalPrice: deal.originalPrice || deal.dealPrice,
+    discountPct: deal.discountPct || 0,
+    platform: 'amazon',
+  });
+
+  // Build the hostel-specific intro
+  let intro = '';
+  if (filterResult.isFlashDeal) {
+    intro = `🔥 *FLASH DEAL* 🔥\n⚡ _Grab before stock ends!_\n\n`;
+  } else if (filterResult.dealTag) {
+    intro = `${filterResult.dealTag}\n\n`;
+  } else {
+    const hostelIntros = [
+      `🎓 Student Deal Alert!`,
+      `📚 Campus Offer!`,
+      `🏠 Hostel Essential!`,
+      `💡 Smart Buy for Students!`,
+    ];
+    const seed = cleanTitle.length || 0;
+    intro = `${hostelIntros[seed % hostelIntros.length]}\n\n`;
+  }
+
+  let msg = intro;
+  
+  // Category tag
+  if (filterResult.category && filterResult.category !== '🛒 General') {
+    msg += `${filterResult.category}\n\n`;
+  }
+
+  msg += `*${escapedTitle}*\n\n`;
+  
+  if (deal.dealPrice > 0 && deal.originalPrice && deal.originalPrice > 0) {
+    msg += `❌ MRP: ~₹${deal.originalPrice.toLocaleString('en-IN')}~\n`;
+    msg += `✅ *Deal Price: ₹${deal.dealPrice.toLocaleString('en-IN')}*`;
+    if (deal.discountPct && deal.discountPct > 0) {
+      msg += ` _(${deal.discountPct}% OFF)_`;
+    }
+    msg += `\n\n`;
+
+    // Savings callout — students love knowing how much they save
+    const savings = deal.originalPrice - deal.dealPrice;
+    if (savings > 0) {
+      msg += `💸 *You Save: ₹${savings.toLocaleString('en-IN')}*\n\n`;
+    }
+  } else {
+    msg += `✅ *Great Deal Available!*\n`;
+    msg += `👉 _Check the price on the link below_\n\n`;
+  }
+
+  if (deal.bankOffer) {
+    msg += `🏦 *Bank Offer:* ${escapeMarkdown(deal.bankOffer)}\n\n`;
+  }
+
+  msg += `👇 *Grab it now* 👇`;
+
+  return msg;
+}
+
+// =====================================================================
+// PUBLISH TO TELEGRAM — Sends deal to specified channel
+// =====================================================================
 export async function publishToTelegram(dealId: string, channelId: string) {
   try {
     const deal = await prisma.deal.findUnique({
@@ -131,25 +209,37 @@ export async function publishToTelegram(dealId: string, channelId: string) {
       throw new Error('Cannot publish to Telegram: Product does not have a valid image URL');
     }
 
-    const caption = generateDealCaption({
-      title: deal.product.title,
-      originalPrice: deal.originalPrice,
-      dealPrice: deal.dealPrice,
-      discountPct: deal.discountPct,
-      affiliateUrl: deal.affiliateUrl || deal.product.url,
-      score: deal.dealScore,
-      bankOffer: deal.bankOffer,
-      isVerified: deal.isGenuine,
-    });
+    // Use hostel-specific caption for hostel channel
+    const hostelChannel = process.env.HOSTEL_CHANNEL || '@hosteldeals';
+    const isHostelChannel = channelId === hostelChannel || channelId === '@hosteldeals';
+
+    const caption = isHostelChannel
+      ? generateHostelCaption({
+          title: deal.product.title,
+          originalPrice: deal.originalPrice,
+          dealPrice: deal.dealPrice,
+          discountPct: deal.discountPct,
+          affiliateUrl: deal.affiliateUrl || deal.product.url,
+          score: deal.dealScore,
+          bankOffer: deal.bankOffer,
+          isVerified: deal.isGenuine,
+        })
+      : generateDealCaption({
+          title: deal.product.title,
+          originalPrice: deal.originalPrice,
+          dealPrice: deal.dealPrice,
+          discountPct: deal.discountPct,
+          affiliateUrl: deal.affiliateUrl || deal.product.url,
+          score: deal.dealScore,
+          bankOffer: deal.bankOffer,
+          isVerified: deal.isGenuine,
+        });
 
     if (bot) {
-      const buttonOptions = [
-        '👉 Check Offer',
-        '⚡ Check Deal',
-        '🛍️ View Deal',
-        '🔥 Grab Offer',
-        '🎯 Check Price'
-      ];
+      const buttonOptions = isHostelChannel
+        ? ['🎓 Buy Now', '⚡ Grab Deal', '🛍️ Check Offer', '🔥 Get It Now', '💰 Save Now']
+        : ['👉 Check Offer', '⚡ Check Deal', '🛍️ View Deal', '🔥 Grab Offer', '🎯 Check Price'];
+      
       // Keep button text consistent per post, but diverse across different products
       const buttonText = buttonOptions[deal.product.title.length % buttonOptions.length];
 
