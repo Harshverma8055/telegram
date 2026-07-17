@@ -497,9 +497,8 @@ export async function GET(request: Request) {
       const affiliateUrl = getAffiliateUrl(dealInfo.platform, dealInfo.cleanUrl, dealInfo.externalId);
 
       // COMMISSION SAFETY: Only auto-publish if we have a working affiliate solution.
-      // Amazon = direct tag (always works) ✅
-      // Flipkart/Myntra/Ajio = needs manual EarnKaro link (no API yet) → save as Pending
-      const hasWorkingAffiliate = dealInfo.platform === 'amazon';
+      // COMMISSION SAFETY: We now use Cuelinks for Flipkart/Myntra/Ajio, so ALL platforms have a working affiliate link automatically.
+      const hasWorkingAffiliate = true;
 
       // If price is NOT verified, post without price to maintain trust
       if (!priceVerified) {

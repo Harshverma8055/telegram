@@ -77,7 +77,6 @@ export async function GET(request: Request) {
         isPublished: true,
         isPublishedHostel: false,
         createdAt: { gte: sixHoursAgo },
-        isGenuine: true,
       },
       include: {
         product: true,
