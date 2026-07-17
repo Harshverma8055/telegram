@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import prisma from '@/lib/prisma';
-import { fetchAmazonDetails } from '@/lib/scrapers/rss';
+import { fetchAmazonDetails } from '@/lib/stealth-scraper';
 import { publishToTelegram, sanitizeTitle, bot, escapeMarkdown } from '@/lib/telegram';
 import { getAffiliateUrl } from '@/lib/affiliate';
 
