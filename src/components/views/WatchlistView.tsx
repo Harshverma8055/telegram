@@ -371,11 +371,13 @@ export default function WatchlistView() {
                     position: 'relative'
                   }}>
                     {product.imageUrl ? (
-                      <Image 
+                      <img 
                         src={product.imageUrl} 
                         alt={product.title} 
-                        fill
-                        style={{ objectFit: 'contain' }}
+                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://placehold.co/80x80/f1f5f9/94a3b8?text=No+Image';
+                        }}
                       />
                     ) : (
                       <TrendingDown size={32} color="var(--text-muted)" style={{ opacity: 0.3 }} />
