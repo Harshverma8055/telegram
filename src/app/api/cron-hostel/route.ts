@@ -27,7 +27,7 @@ import { shouldPostToHostel, STUDENT_SCORE_THRESHOLD } from '@/lib/hostel-filter
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
 // Process up to 8 deals per run (these are just DB reads + Telegram sends, very fast)
-const BATCH_SIZE = 8;
+const BATCH_SIZE = 15;
 const MAX_MS = 9000;
 
 function isSilentHoursIST(): boolean {
@@ -69,14 +69,14 @@ export async function GET(request: Request) {
     // Find deals that:
     // 1. Were published to main channel (isPublished = true)
     // 2. NOT yet sent to hostel channel (isPublishedHostel = false)
-    // 3. Created in the last 6 hours (don't forward stale deals)
-    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    // 3. Created in the last 24 hours (wide window to handle infrequent cron runs)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const pendingDeals = await prisma.deal.findMany({
       where: {
         isPublished: true,
         isPublishedHostel: false,
-        createdAt: { gte: sixHoursAgo },
+        createdAt: { gte: twentyFourHoursAgo },
       },
       include: {
         product: true,
