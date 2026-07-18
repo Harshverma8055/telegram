@@ -11,6 +11,10 @@
     {
       "path": "/api/cron-wishlist",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron-wishlist2",
+      "schedule": "*/12 * * * *"
     }
   ]
 }

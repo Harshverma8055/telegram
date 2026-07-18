@@ -155,3 +155,28 @@ model WishlistProduct {
   lastUpdated   DateTime @default(now()) @map("last_updated")
 }
 
+// =====================================================================
+// 🔗 CUELINK WISHLIST — Non-Amazon product monitoring
+// Tracks Flipkart, Myntra, Ajio, Meesho, Nykaa etc.
+// Completely independent from the Amazon WishlistProduct table.
+// =====================================================================
+model CuelinkWishlist {
+  id              String   @id @default(uuid())
+  externalId      String   @unique  // Product ID from the platform URL
+  platform        String             // flipkart, myntra, ajio, meesho, nykaa
+  title           String
+  productUrl      String   @map("product_url")
+  brand           String?
+  category        String
+  subcategory     String
+  price           Float              // Last known price
+  mrp             Float              // Maximum retail price
+  discount        Float              // Current discount %
+  image           String             // Product image URL
+  targetPrice     Float?   @map("target_price")
+  targetDiscount  Float?   @map("target_discount")
+  active          Boolean  @default(true)  // Whether to keep monitoring
+  lastCheckedAt   DateTime @default(now()) @map("last_checked_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+}
+
