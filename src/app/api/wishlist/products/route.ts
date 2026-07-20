@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow 60 seconds execution on Vercel
 import prisma from '@/lib/prisma';
 import { ensureWishlistTableExists, fetchFullAmazonProductDetails, calculateScores } from '@/lib/scrapers/amazon-research';
 import crypto from 'crypto';
