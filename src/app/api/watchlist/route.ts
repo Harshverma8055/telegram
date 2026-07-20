@@ -5,6 +5,48 @@ import { sanitizeTitle } from '@/lib/telegram';
 
 export async function GET() {
   try {
+    // 1. Fetch real ASINs from WishlistProduct table (780 real verified products)
+    const wishlists = await prisma.wishlistProduct.findMany({
+      select: { asin: true, image: true }
+    });
+    const realAsinMap = new Map<string, string>();
+    wishlists.forEach(w => { if (w.image) realAsinMap.set(w.asin, w.image); });
+
+    // 2. Automatically purge fake/dummy seed products from database
+    const allWatchlist = await prisma.product.findMany({
+      where: { category: 'watchlist' }
+    });
+
+    const fakeIdsToDelete: string[] = [];
+    for (const p of allWatchlist) {
+      const inWishlist = realAsinMap.has(p.externalId);
+      // Identify fake hardcoded seed titles
+      const isFakeSeed = p.title.startsWith('Sparx') || 
+                         p.title.startsWith('Noise ColorFit') || 
+                         p.title.startsWith('Hammonds Flycatcher') || 
+                         p.title.startsWith('Lorenz Leather') || 
+                         p.title.startsWith('Vellinton') || 
+                         p.title.startsWith('Bicycle Standard') || 
+                         p.title.startsWith('Yonex') ||
+                         p.title.startsWith('Boldfit') ||
+                         p.title.startsWith('Weird Wolf') ||
+                         p.title.startsWith('RC.ROYAL CLASS');
+
+      if (!inWishlist && isFakeSeed) {
+        fakeIdsToDelete.push(p.id);
+      }
+    }
+
+    if (fakeIdsToDelete.length > 0) {
+      await prisma.priceHistory.deleteMany({
+        where: { productId: { in: fakeIdsToDelete } }
+      });
+      await prisma.product.deleteMany({
+        where: { id: { in: fakeIdsToDelete } }
+      });
+    }
+
+    // 3. Fetch clean products remaining in watchlist
     const products = await prisma.product.findMany({
       where: {
         category: 'watchlist'
@@ -22,21 +64,9 @@ export async function GET() {
       }
     });
 
-    // Auto-heal images: map with 780 active WishlistProduct records if image is missing/broken
-    const wishlists = await prisma.wishlistProduct.findMany({
-      select: { asin: true, image: true }
-    });
-    const imageMap = new Map<string, string>();
-    wishlists.forEach(w => {
-      if (w.image && w.image.startsWith('http')) {
-        imageMap.set(w.asin, w.image);
-      }
-    });
-
+    // Auto-heal images for remaining real products
     for (const p of products) {
-      let liveImage = imageMap.get(p.externalId);
-      
-      // Fallback to Amazon static ASIN image if missing from WishlistProduct
+      let liveImage = realAsinMap.get(p.externalId);
       if (!liveImage && (p.platform?.slug === 'amazon' || !p.platform) && p.externalId) {
         liveImage = `https://images-na.ssl-images-amazon.com/images/P/${p.externalId}.01.LZZZZZZZ.jpg`;
       }
