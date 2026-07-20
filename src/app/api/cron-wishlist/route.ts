@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
 import prisma from '@/lib/prisma';
 import { fetchAmazonDetails } from '@/lib/stealth-scraper';
 import { publishToTelegram, sanitizeTitle, bot, escapeMarkdown } from '@/lib/telegram';
@@ -10,10 +11,9 @@ import { getAffiliateUrl } from '@/lib/affiliate';
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
 // How many wishlist items to check per cron run
-// Keep low (15) so we stay well under Vercel's 10s limit
 const BATCH_SIZE = 15;
-// Max execution time in ms (stay under 9s for safety)
-const MAX_MS = 9000;
+// Max execution time in ms (50s safety guard for Vercel 60s maxDuration)
+const MAX_MS = 50000;
 
 function isSilentHoursIST(): boolean {
   const now = new Date();

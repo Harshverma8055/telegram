@@ -20,15 +20,16 @@
 
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
 import prisma from '@/lib/prisma';
 import { publishToTelegram } from '@/lib/telegram';
 import { shouldPostToHostel, STUDENT_SCORE_THRESHOLD } from '@/lib/hostel-filter';
 
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
-// Process up to 8 deals per run (these are just DB reads + Telegram sends, very fast)
+// Process up to 15 deals per run
 const BATCH_SIZE = 15;
-const MAX_MS = 9000;
+const MAX_MS = 50000; // 50 seconds safety guard (well within 60s maxDuration)
 
 function isSilentHoursIST(): boolean {
   const now = new Date();
@@ -155,12 +156,8 @@ export async function GET(request: Request) {
           console.error(`[cron-hostel] Post error:`, err.message);
         }
       } else {
-        // During silent hours, mark as processed but don't post
-        await prisma.deal.update({
-          where: { id: deal.id },
-          data: { isPublishedHostel: true },
-        });
-        logs.push(`💤 Silent hours — deal qualified but not posted.`);
+        // During silent hours, leave isPublishedHostel = false so morning cron posts them!
+        logs.push(`💤 Silent hours — deal qualified, keeping queued for morning posting.`);
       }
     }
 

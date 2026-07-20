@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
 import prisma from '@/lib/prisma';
 import { fetchProductDetails } from '@/lib/cuelink-scraper';
 import { bot, sanitizeTitle, escapeMarkdown } from '@/lib/telegram';
@@ -24,7 +25,7 @@ const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 const MAIN_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
 
 const BATCH_SIZE = 10;
-const MAX_MS = 9000;
+const MAX_MS = 50000; // 50s safety guard for Vercel 60s maxDuration
 
 function isSilentHoursIST(): boolean {
   const now = new Date();
