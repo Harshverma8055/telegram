@@ -881,8 +881,17 @@ export async function PUT() {
       create: { name: 'Amazon', slug: 'amazon' }
     });
 
+    // 2. Fetch real active products from WishlistProduct table
+    const realWishlistItems = await prisma.wishlistProduct.findMany({
+      where: {
+        price: { gt: 0 },
+        amazonUrl: { startsWith: 'http' }
+      },
+      take: 80
+    });
+
     let count = 0;
-    for (const item of studentWatchlistSeed) {
+    for (const item of realWishlistItems) {
       // Create or update the product
       const product = await prisma.product.upsert({
         where: {
@@ -894,35 +903,39 @@ export async function PUT() {
         update: {
           category: 'watchlist',
           title: item.title,
-          url: item.url,
-          mrp: item.mrp,
-          currentPrice: item.currentPrice,
-          imageUrl: item.imageUrl
+          url: item.amazonUrl,
+          mrp: item.mrp || Math.round(item.price * 1.25),
+          currentPrice: item.price,
+          imageUrl: item.image
         },
         create: {
           platformId: platform.id,
           externalId: item.asin,
           category: 'watchlist',
           title: item.title,
-          url: item.url,
-          mrp: item.mrp,
-          currentPrice: item.currentPrice,
-          imageUrl: item.imageUrl
+          url: item.amazonUrl,
+          mrp: item.mrp || Math.round(item.price * 1.25),
+          currentPrice: item.price,
+          imageUrl: item.image
         }
       });
 
       // Insert initial price history points (MRP past point + current price)
       const pastDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      await prisma.priceHistory.deleteMany({
+        where: { productId: product.id }
+      });
+
       await prisma.priceHistory.createMany({
         data: [
           {
             productId: product.id,
-            price: item.mrp || Math.round(item.currentPrice * 1.2),
+            price: item.mrp && item.mrp > item.price ? item.mrp : Math.round(item.price * 1.2),
             recordedAt: pastDate
           },
           {
             productId: product.id,
-            price: item.currentPrice,
+            price: item.price,
             recordedAt: new Date()
           }
         ]
