@@ -484,34 +484,80 @@ export async function resolveDealUrl(link: string, content: string = ''): Promis
   return null;
 }
 
-// Scrapes OpenGraph tags by posing as a Discord preview bot (extremely reliable, captcha-free)
+// Scrapes OpenGraph & JSON-LD metadata reliably (captcha-free fallback)
 export async function fetchPageMetadata(url: string) {
   try {
     const response = await axios.get(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+        'User-Agent': getRandomUA(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5'
+        'Accept-Language': 'en-IN,en-US,en;q=0.9',
       },
       timeout: 8000
     });
     const $ = cheerio.load(response.data);
     
-    const title = $('meta[property="og:title"]').attr('content') || 
-                  $('meta[name="twitter:title"]').attr('content') || 
-                  $('title').text() || '';
+    let title = $('meta[property="og:title"]').attr('content') || 
+                $('meta[name="twitter:title"]').attr('content') || 
+                $('title').text() || '';
                   
-    const imageUrl = $('meta[property="og:image"]').attr('content') || 
-                      $('meta[name="twitter:image"]').attr('content') || '';
+    let imageUrl = $('meta[property="og:image"]').attr('content') || 
+                    $('meta[name="twitter:image"]').attr('content') || '';
     
+    let currentPrice = 0;
+    let originalPrice = 0;
+
+    // Check OpenGraph price meta tags
+    const ogPrice = $('meta[property="product:price:amount"]').attr('content') ||
+                    $('meta[property="og:price:amount"]').attr('content');
+    if (ogPrice) {
+      currentPrice = parseFloat(ogPrice);
+    }
+
+    // Parse JSON-LD structured metadata (<script type="application/ld+json">)
+    $('script[type="application/ld+json"]').each((_, el) => {
+      try {
+        const text = $(el).html() || '';
+        const json = JSON.parse(text);
+        const items = Array.isArray(json) ? json : [json];
+        for (const item of items) {
+          if (!item) continue;
+          if (item.name && (!title || title.length < 5)) title = item.name;
+          if (item.image) {
+            if (typeof item.image === 'string') imageUrl = item.image;
+            else if (Array.isArray(item.image) && item.image[0]) imageUrl = typeof item.image[0] === 'string' ? item.image[0] : item.image[0].url;
+            else if (item.image.url) imageUrl = item.image.url;
+          }
+          if (item.offers) {
+            const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+            if (offers.price) currentPrice = parseFloat(String(offers.price).replace(/,/g, ''));
+            else if (offers.lowPrice) currentPrice = parseFloat(String(offers.lowPrice).replace(/,/g, ''));
+            if (offers.highPrice) originalPrice = parseFloat(String(offers.highPrice).replace(/,/g, ''));
+          }
+        }
+      } catch (e) {}
+    });
+
+    // Fallback: price regex search in page body if still missing
+    if (currentPrice === 0) {
+      const bodyText = $('body').text();
+      const match = bodyText.match(/(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)/i);
+      if (match) {
+        const val = parseFloat(match[1].replace(/,/g, ''));
+        if (!isNaN(val) && val > 10 && val < 500000) {
+          currentPrice = Math.round(val);
+        }
+      }
+    }
+
     return {
       title: title.trim(),
       imageUrl: imageUrl.trim(),
-      currentPrice: 0,
-      originalPrice: 0
+      currentPrice: isNaN(currentPrice) ? 0 : currentPrice,
+      originalPrice: isNaN(originalPrice) ? 0 : originalPrice
     };
-  } catch (e) {
-    console.error('Failed to scrape metadata for:', url);
+  } catch (e: any) {
+    console.error('Failed to scrape metadata for:', url, e.message);
     return null;
   }
 }

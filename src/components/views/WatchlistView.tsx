@@ -15,6 +15,7 @@ import {
   Target,
   Edit2,
   Save,
+  ShoppingBag,
   X
 } from 'lucide-react';
 import Image from 'next/image';
@@ -361,26 +362,40 @@ export default function WatchlistView() {
                   <div style={{ 
                     width: '80px', 
                     height: '80px', 
-                    borderRadius: '8px', 
-                    background: 'white', 
+                    borderRadius: '10px', 
+                    background: 'rgba(255, 255, 255, 0.04)', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
                     overflow: 'hidden',
                     border: '1px solid var(--border-primary)',
-                    position: 'relative'
+                    position: 'relative',
+                    padding: '4px'
                   }}>
                     {product.imageUrl ? (
                       <img 
                         src={product.imageUrl} 
-                        alt={product.title} 
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                        alt={product.title}
+                        referrerPolicy="no-referrer"
+                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', background: 'white', borderRadius: '6px', padding: '2px' }} 
                         onError={(e) => {
-                          e.currentTarget.src = 'https://placehold.co/80x80/f1f5f9/94a3b8?text=No+Image';
+                          const target = e.currentTarget;
+                          if (!target.dataset.triedProxy) {
+                            target.dataset.triedProxy = 'true';
+                            target.src = `/api/proxy-image?url=${encodeURIComponent(product.imageUrl)}`;
+                          } else {
+                            target.style.display = 'none';
+                            if (target.parentElement) {
+                              target.parentElement.style.background = 'rgba(255, 255, 255, 0.04)';
+                              target.parentElement.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-muted);opacity:0.5;gap:4px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>';
+                            }
+                          }
                         }}
                       />
                     ) : (
-                      <TrendingDown size={32} color="var(--text-muted)" style={{ opacity: 0.3 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', opacity: 0.5, gap: '4px' }}>
+                        <ShoppingBag size={24} />
+                      </div>
                     )}
                   </div>
 

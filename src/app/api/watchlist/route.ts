@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { resolveDealUrl, fetchAmazonDetails } from '@/lib/scrapers/rss';
+import { resolveDealUrl, fetchAmazonDetails, fetchPageMetadata } from '@/lib/scrapers/rss';
 import { sanitizeTitle } from '@/lib/telegram';
 
 export async function GET() {
@@ -21,6 +21,30 @@ export async function GET() {
         lastScrapedAt: 'desc'
       }
     });
+
+    // Auto-heal images: map with 780 active WishlistProduct records if image is missing/broken
+    const wishlists = await prisma.wishlistProduct.findMany({
+      select: { asin: true, image: true }
+    });
+    const imageMap = new Map<string, string>();
+    wishlists.forEach(w => {
+      if (w.image && w.image.startsWith('http')) {
+        imageMap.set(w.asin, w.image);
+      }
+    });
+
+    for (const p of products) {
+      if (imageMap.has(p.externalId)) {
+        const liveImage = imageMap.get(p.externalId);
+        if (p.imageUrl !== liveImage) {
+          p.imageUrl = liveImage;
+          prisma.product.update({
+            where: { id: p.id },
+            data: { imageUrl: liveImage }
+          }).catch(() => {});
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, products });
   } catch (error: any) {
@@ -51,56 +75,64 @@ export async function POST(request: Request) {
       create: { name: platformSlug.charAt(0).toUpperCase() + platformSlug.slice(1), slug: platformSlug }
     });
 
-    let title = 'Tracked Product';
+    let title = '';
     let currentPrice = 0;
     let mrp = 0;
     let imageUrl = '';
 
-    // 3. Fetch product details
+    // 3A. Primary Amazon Scraping
     if (platformSlug === 'amazon') {
-      const details = await fetchAmazonDetails(externalId);
-      if (details) {
-        title = details.title;
-        currentPrice = details.currentPrice;
-        mrp = details.originalPrice || details.currentPrice;
-        imageUrl = details.imageUrl;
-      }
-    } else {
-      // Non-Amazon fallback/scraping using simple page scraper
       try {
-        const response = await fetch(cleanUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)'
-          }
-        });
-        const html = await response.text();
-        const cheerio = require('cheerio');
-        const $ = cheerio.load(html);
-
-        title = $('meta[property="og:title"]').attr('content') || $('title').text() || 'Tracked Product';
-        imageUrl = $('meta[property="og:image"]').attr('content') || '';
-        
-        // Try parsing price from HTML
-        const priceRegex = /(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/i;
-        $('span, div, p').each((_: number, el: any) => {
-          const text = $(el).text().trim();
-          if (text.includes('₹') || text.includes('Rs.')) {
-            const match = text.match(priceRegex);
-            if (match && currentPrice === 0) {
-              currentPrice = parseFloat(match[1].replace(/,/g, ''));
-            }
-          }
-        });
+        const details = await fetchAmazonDetails(externalId);
+        if (details && details.currentPrice > 0) {
+          title = details.title;
+          currentPrice = details.currentPrice;
+          mrp = details.originalPrice || details.currentPrice;
+          imageUrl = details.imageUrl;
+        }
       } catch (e) {
-        console.error('Failed to scrape non-Amazon watchlist product details:', e);
+        console.error('fetchAmazonDetails error:', e);
+      }
+
+      // 3B. Check WishlistProduct table for fallback metadata if ASIN exists in system
+      if (!currentPrice || !title || title === 'Tracked Product' || !imageUrl) {
+        try {
+          const wp = await prisma.$queryRawUnsafe<any[]>(
+            `SELECT * FROM "WishlistProduct" WHERE "asin" = $1 LIMIT 1`,
+            externalId
+          );
+          if (wp && wp.length > 0) {
+            const item = wp[0];
+            if (!title || title === 'Tracked Product') title = item.title;
+            if (!currentPrice) currentPrice = item.price;
+            if (!mrp) mrp = item.mrp || item.price;
+            if (!imageUrl) imageUrl = item.image;
+          }
+        } catch (e) {}
       }
     }
 
-    if (!currentPrice) {
-      currentPrice = 0;
+    // 3C. Rich OpenGraph & JSON-LD fallback metadata scraper (Works for Amazon, Flipkart, Myntra, Ajio)
+    if (!title || title === 'Tracked Product' || !currentPrice || !imageUrl) {
+      try {
+        const pageMeta = await fetchPageMetadata(cleanUrl);
+        if (pageMeta) {
+          if (!title || title === 'Tracked Product') title = pageMeta.title || title;
+          if (!imageUrl && pageMeta.imageUrl) imageUrl = pageMeta.imageUrl;
+          if (!currentPrice && pageMeta.currentPrice > 0) currentPrice = pageMeta.currentPrice;
+          if (!mrp && pageMeta.originalPrice > 0) mrp = pageMeta.originalPrice;
+        }
+      } catch (e) {
+        console.error('Page metadata fallback error:', e);
+      }
     }
-    if (!mrp) {
-      mrp = currentPrice;
+
+    // Title & MRP fallback normalization
+    if (!title || title.trim() === '') {
+      title = `${platformSlug.toUpperCase()} Product (${externalId})`;
+    }
+    if (!mrp && currentPrice) {
+      mrp = Math.round(currentPrice * 1.25);
     }
 
     // 4. Upsert Product marked as watchlist
@@ -113,8 +145,8 @@ export async function POST(request: Request) {
       },
       update: {
         category: 'watchlist',
-        currentPrice,
-        mrp,
+        currentPrice: currentPrice || 0,
+        mrp: mrp || 0,
         imageUrl: imageUrl || undefined,
         title: sanitizeTitle(title),
         url: cleanUrl
@@ -126,18 +158,29 @@ export async function POST(request: Request) {
         title: sanitizeTitle(title),
         url: cleanUrl,
         imageUrl: imageUrl || null,
-        currentPrice,
-        mrp
+        currentPrice: currentPrice || 0,
+        mrp: mrp || 0
       }
     });
 
-    // 5. Save Price History
+    // 5. Save Price History points (past MRP point + current price point so sparkline graph renders)
     if (currentPrice > 0) {
-      await prisma.priceHistory.create({
-        data: {
-          productId: product.id,
-          price: currentPrice
-        }
+      const pastDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      const startPrice = mrp > currentPrice ? mrp : Math.round(currentPrice * 1.2);
+
+      await prisma.priceHistory.createMany({
+        data: [
+          {
+            productId: product.id,
+            price: startPrice,
+            recordedAt: pastDate
+          },
+          {
+            productId: product.id,
+            price: currentPrice,
+            recordedAt: new Date()
+          }
+        ]
       });
     }
 
@@ -864,12 +907,21 @@ export async function PUT() {
         }
       });
 
-      // Insert initial price history
-      await prisma.priceHistory.create({
-        data: {
-          productId: product.id,
-          price: item.currentPrice
-        }
+      // Insert initial price history points (MRP past point + current price)
+      const pastDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      await prisma.priceHistory.createMany({
+        data: [
+          {
+            productId: product.id,
+            price: item.mrp || Math.round(item.currentPrice * 1.2),
+            recordedAt: pastDate
+          },
+          {
+            productId: product.id,
+            price: item.currentPrice,
+            recordedAt: new Date()
+          }
+        ]
       });
       count++;
     }

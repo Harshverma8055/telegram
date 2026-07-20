@@ -185,6 +185,14 @@ export async function GET(request: Request) {
           }
         });
 
+        // Insert price history
+        await prisma.priceHistory.create({
+          data: {
+            productId: product.id,
+            price: latestPrice
+          }
+        });
+
         // Mark wishlist item so it's not re-triggered
         await prisma.$executeRawUnsafe(
           `UPDATE "WishlistProduct" SET "wishlist" = false, "last_updated" = NOW() WHERE "id" = $1`,
@@ -205,6 +213,108 @@ export async function GET(request: Request) {
         } else {
           logs.push(`💤 Silent hours — deal saved but not posted.`);
           console.log(`💤 [cron-wishlist] Silent hours — skipping publish.`);
+        }
+      }
+    }
+
+    // =====================================================================
+    // 📊 PRICE TRACKER WATCHLIST MONITORING (Product table with category = 'watchlist')
+    // =====================================================================
+    const watchlistProducts = await prisma.product.findMany({
+      where: { category: 'watchlist' },
+      include: { platform: true },
+      orderBy: { lastScrapedAt: 'asc' },
+      take: 10
+    });
+
+    if (watchlistProducts.length > 0) {
+      logs.push(`📊 Tracing prices for ${watchlistProducts.length} Watchlist products...`);
+      for (const wProd of watchlistProducts) {
+        if (Date.now() - startTime > MAX_MS) {
+          logs.push(`⏱️ Timeout guard hit during watchlist price tracing.`);
+          break;
+        }
+
+        try {
+          let latestPrice = 0;
+          let originalPrice = wProd.mrp || 0;
+          let imageUrl = wProd.imageUrl;
+          let fetchedTitle = wProd.title;
+
+          if (wProd.platform?.slug === 'amazon') {
+            const details = await fetchAmazonDetails(wProd.externalId);
+            if (details && details.currentPrice > 0) {
+              latestPrice = details.currentPrice;
+              originalPrice = details.originalPrice || wProd.mrp || latestPrice;
+              if (details.imageUrl) imageUrl = details.imageUrl;
+              if (details.title) fetchedTitle = details.title;
+            }
+          }
+
+          if (latestPrice > 0) {
+            // Touch lastScrapedAt
+            await prisma.product.update({
+              where: { id: wProd.id },
+              data: {
+                currentPrice: latestPrice,
+                mrp: Math.max(originalPrice, wProd.mrp || 0, latestPrice),
+                imageUrl: imageUrl || wProd.imageUrl,
+                title: sanitizeTitle(fetchedTitle),
+                lastScrapedAt: new Date()
+              }
+            });
+
+            // Check price history
+            const lastHistory = await prisma.priceHistory.findFirst({
+              where: { productId: wProd.id },
+              orderBy: { recordedAt: 'desc' }
+            });
+
+            if (!lastHistory || lastHistory.price !== latestPrice) {
+              await prisma.priceHistory.create({
+                data: {
+                  productId: wProd.id,
+                  price: latestPrice,
+                  recordedAt: new Date()
+                }
+              });
+              logs.push(`📈 [Watchlist] Recorded new price history for ${wProd.title.substring(0, 30)}...: ₹${latestPrice}`);
+            }
+
+            // Target price check
+            const hasTargetPrice = wProd.targetPrice !== null && wProd.targetPrice > 0;
+            const targetMet = hasTargetPrice ? latestPrice <= (wProd.targetPrice as number) : false;
+
+            if (targetMet) {
+              logs.push(`🎯 WATCHLIST TARGET MET: ${wProd.title} (₹${latestPrice} <= ₹${wProd.targetPrice})`);
+              const affiliateUrl = getAffiliateUrl('amazon', wProd.url, wProd.externalId);
+              const deal = await prisma.deal.create({
+                data: {
+                  productId: wProd.id,
+                  platformId: wProd.platformId,
+                  dealType: 'price_drop',
+                  dealScore: 99,
+                  dealPrice: latestPrice,
+                  originalPrice: originalPrice || wProd.mrp || latestPrice,
+                  discountPct: originalPrice > latestPrice ? Math.round(((originalPrice - latestPrice) / originalPrice) * 100) : 0,
+                  affiliateUrl,
+                  isGenuine: true,
+                  isPublished: false
+                }
+              });
+
+              if (!isSilent) {
+                try {
+                  await publishToTelegram(deal.id, HOSTEL_CHANNEL);
+                  logs.push(`✅ Published watchlist alert to ${HOSTEL_CHANNEL}`);
+                } catch (e: any) {
+                  console.error('Failed to publish watchlist deal:', e.message);
+                }
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error(`Failed tracing price for watchlist product ${wProd.id}:`, err.message);
         }
       }
     }
