@@ -1,0 +1,20 @@
+[
+  {
+    "query": "Destinio Umbrella automatic 3 fold",
+    "category": "Hostel Living",
+    "subcategory": "Umbrella",
+    "targetDiscount": 20
+  },
+  {
+    "query": "JK Copier Paper A4 Size 75 GSM",
+    "category": "Stationery",
+    "subcategory": "A4 Paper",
+    "targetDiscount": 15
+  },
+  {
+    "query": "Red Tape Sneakers for Men white",
+    "category": "Fashion",
+    "subcategory": "Sneakers",
+    "targetDiscount": 30
+  }
+]
