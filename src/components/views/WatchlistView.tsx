@@ -372,15 +372,18 @@ export default function WatchlistView() {
                     position: 'relative',
                     padding: '4px'
                   }}>
-                    {product.imageUrl ? (
+                    {product.imageUrl || product.externalId ? (
                       <img 
-                        src={product.imageUrl} 
-                        alt={product.title}
+                        src={product.imageUrl || `https://images-na.ssl-images-amazon.com/images/P/${product.externalId}.01.LZZZZZZZ.jpg`} 
+                        alt=""
                         referrerPolicy="no-referrer"
                         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', background: 'white', borderRadius: '6px', padding: '2px' }} 
                         onError={(e) => {
                           const target = e.currentTarget;
-                          if (!target.dataset.triedProxy) {
+                          if (!target.dataset.triedAsinFallback && product.externalId) {
+                            target.dataset.triedAsinFallback = 'true';
+                            target.src = `https://images-na.ssl-images-amazon.com/images/P/${product.externalId}.01.LZZZZZZZ.jpg`;
+                          } else if (!target.dataset.triedProxy && product.imageUrl) {
                             target.dataset.triedProxy = 'true';
                             target.src = `/api/proxy-image?url=${encodeURIComponent(product.imageUrl)}`;
                           } else {

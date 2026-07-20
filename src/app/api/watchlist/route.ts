@@ -34,15 +34,19 @@ export async function GET() {
     });
 
     for (const p of products) {
-      if (imageMap.has(p.externalId)) {
-        const liveImage = imageMap.get(p.externalId);
-        if (p.imageUrl !== liveImage) {
-          p.imageUrl = liveImage;
-          prisma.product.update({
-            where: { id: p.id },
-            data: { imageUrl: liveImage }
-          }).catch(() => {});
-        }
+      let liveImage = imageMap.get(p.externalId);
+      
+      // Fallback to Amazon static ASIN image if missing from WishlistProduct
+      if (!liveImage && (p.platform?.slug === 'amazon' || !p.platform) && p.externalId) {
+        liveImage = `https://images-na.ssl-images-amazon.com/images/P/${p.externalId}.01.LZZZZZZZ.jpg`;
+      }
+
+      if (liveImage && p.imageUrl !== liveImage) {
+        p.imageUrl = liveImage;
+        prisma.product.update({
+          where: { id: p.id },
+          data: { imageUrl: liveImage }
+        }).catch(() => {});
       }
     }
 
