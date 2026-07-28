@@ -19,11 +19,12 @@
 // =====================================================================
 
 import { NextResponse } from 'next/server';
-export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
 import prisma from '@/lib/prisma';
 import { publishToTelegram } from '@/lib/telegram';
 import { shouldPostToHostel, STUDENT_SCORE_THRESHOLD } from '@/lib/hostel-filter';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
 
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
