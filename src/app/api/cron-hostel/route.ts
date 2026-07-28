@@ -30,6 +30,7 @@ const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
 // Process up to 15 deals per run
 const BATCH_SIZE = 15;
+const MAX_POSTS_PER_RUN = 2; // Spacing limit: post at most 2 deals per run to prevent spamming
 const MAX_MS = 50000; // 50 seconds safety guard (well within 60s maxDuration)
 
 function isSilentHoursIST(): boolean {
@@ -138,6 +139,12 @@ export async function GET(request: Request) {
       console.log(`🎓 [cron-hostel] QUALIFIED: score=${filterResult.score} "${title.substring(0, 50)}"`);
 
       if (!isSilent) {
+        if (forwarded >= MAX_POSTS_PER_RUN) {
+          logs.push(`⏳ Limit of ${MAX_POSTS_PER_RUN} posts per run reached. Keeping "${title.substring(0, 40)}" queued for next run.`);
+          console.log(`🎓 [cron-hostel] Post limit reached. Keeping in queue: "${title.substring(0, 40)}"`);
+          continue;
+        }
+
         try {
           await publishToTelegram(deal.id, HOSTEL_CHANNEL);
 
