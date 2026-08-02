@@ -44,7 +44,12 @@ export interface DealInput {
 // ─────────────────────────────────────────────────────────────────────────
 // MINIMUM SCORE TO POST TO HOSTEL CHANNEL
 // ─────────────────────────────────────────────────────────────────────────
-export const STUDENT_SCORE_THRESHOLD = 40;
+// FIX: Lowered from 40 → 30 to prevent hostel channel starvation.
+// With the base score of 10 + category bonus, many valid hostel products
+// (like umbrellas at ₹199) were scoring 45, passing fine, but borderline
+// items like shoes at ₹599 were scoring 35-38 and getting cut off.
+// 30 is the safe floor that lets genuine student products through.
+export const STUDENT_SCORE_THRESHOLD = 30;
 
 // ─────────────────────────────────────────────────────────────────────────
 // CATEGORY KEYWORDS — Products students actually buy
@@ -71,11 +76,17 @@ const CATEGORY_KEYWORDS: { name: string; emoji: string; keywords: string[]; bonu
       'mug', 'cup', 'plate', 'spoon', 'fork', 'bucket', 'hanger', 'curtain',
       'bedsheet', 'bed sheet', 'pillow', 'towel', 'mat', 'lock', 'padlock',
       'mosquito net', 'mosquito racket', 'cloth stand', 'drying stand', 'cloth drying',
-      'iron', 'press', 'mini fan', 'table fan', 'storage box', 'organizer',
-      'organiser', 'mirror', 'dustbin', 'broom', 'chair', 'stool', 'lamp',
-      'table lamp', 'study lamp', 'LED light', 'extension board', 'power strip',
-      'multi plug', 'alarm clock', 'door mat', 'shoe rack', 'laundry bag',
-      'clothes pin', 'clip', 'rope', 'wire', 'hook'
+      'iron box', 'iron press', 'mini iron', 'steam iron', 'press', 'mini fan', 'table fan',
+      'storage box', 'organizer', 'organiser', 'mirror', 'dustbin', 'broom', 'chair',
+      'stool', 'lamp', 'table lamp', 'study lamp', 'LED light', 'extension board',
+      'power strip', 'multi plug', 'alarm clock', 'door mat', 'shoe rack', 'laundry bag',
+      'clothes pin', 'clip', 'rope', 'wire', 'hook',
+      // FIX: Added missing hostel essentials requested by user
+      'iron', 'slippers', 'sleeper', 'chappal', 'hawai', 'flip flop', 'flip-flop',
+      'aero slipper', 'bathroom slipper', 'room slipper', 'house slipper',
+      'laptop bag', 'laptop sleeve', 'laptop cover',
+      'shoe bag', 'carry bag', 'tote bag', 'jhola',
+      'shower curtain', 'bathroom mat', 'bath mat', 'bathrobe'
     ]
   },
   {

@@ -38,6 +38,24 @@ const LOW_PRIORITY_KEYWORDS = [
   'geyser', 'microwave', 'oven', 'chimney', 'dishwasher', 'furniture', 'sofa', 'mattress'
 ];
 
+// ❌ These products MUST NEVER be posted to the main channel.
+// The main channel is small (6 subscribers) and growing. Expensive items
+// like mobiles take long research time and irritate new users.
+// Customers who want mobiles research independently — we add no value there.
+const BLOCKED_FROM_MAIN_KEYWORDS = [
+  'smartphone', 'mobile phone', 'android phone', '5g phone', '5g mobile',
+  'iphone', 'samsung galaxy', 'oneplus', 'realme', 'redmi', 'poco phone',
+  'robot vacuum', 'robot cleaner', 'robovac', 'roomba', 'robot mop',
+  'smart tv', 'oled tv', 'qled tv', 'led tv', '4k tv', '8k tv',
+  'air purifier', 'water purifier', 'ro system', 'split ac',
+  'electric vehicle', 'e-scooter', 'electric scooter'
+];
+
+function isBlockedFromMain(title: string): boolean {
+  const lower = title.toLowerCase();
+  return BLOCKED_FROM_MAIN_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 function isToysDeal(title: string): boolean {
   const lower = title.toLowerCase();
   const regex = /\b(toys?|dolls?|barbie|play-?doh|action figures?|rattles?|teethers?|baby walkers?|soft toys?|plushies?|stuffed animals?|stuffed toys?|slime kits?|nerf guns?|legos?)\b/i;
@@ -117,8 +135,9 @@ export async function GET(request: Request) {
         timeSinceLastPostMin = (Date.now() - new Date(lastPublishedDeal.publishedAt).getTime()) / (1000 * 60);
       }
 
-      // If we haven't posted in the last 15 minutes, fetch the highest score pending deal from the last 12 hours
-      if (timeSinceLastPostMin >= 15) {
+      // FIX: Increased from 15m → 45m to prevent same-deal spam on the growing main channel.
+      // With only 6 subscribers, frequent re-posts of the same product irritate users.
+      if (timeSinceLastPostMin >= 45) {
         const pendingDeal = await prisma.deal.findFirst({
           where: {
             isPublished: false,
@@ -127,12 +146,34 @@ export async function GET(request: Request) {
               gte: new Date(Date.now() - 12 * 60 * 60 * 1000)
             }
           },
+          include: { product: true },
           orderBy: { dealScore: 'desc' }
         });
 
-        if (pendingDeal) {
-          console.log(`📥 Draining queue: Auto-publishing pending deal ${pendingDeal.id} from queue.`);
-          await publishToTelegram(pendingDeal.id, TELEGRAM_CHANNEL);
+        if (pendingDeal && pendingDeal.product) {
+          // FIX: Also check that this same product wasn't already posted to main in the last 6 hours
+          // to prevent the same deal appearing twice in the same day.
+          const recentMainPost = await prisma.deal.findFirst({
+            where: {
+              productId: pendingDeal.productId,
+              isPublished: true,
+              publishedAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) }
+            }
+          });
+
+          // FIX: Also block expensive/irrelevant products from being drained to main channel.
+          const isBlocked = isBlockedFromMain(pendingDeal.product.title || '');
+
+          if (!recentMainPost && !isBlocked) {
+            console.log(`📥 Draining queue: Auto-publishing pending deal ${pendingDeal.id} from queue.`);
+            await publishToTelegram(pendingDeal.id, TELEGRAM_CHANNEL);
+          } else if (recentMainPost) {
+            console.log(`⏭️ Queue drain: Skipping deal ${pendingDeal.id} — same product already posted to main in last 6h.`);
+          } else if (isBlocked) {
+            console.log(`🚫 Queue drain: Blocking deal ${pendingDeal.id} — product type is restricted from main channel.`);
+            // Mark as published so it doesn't keep blocking the queue, hostel cron will handle it
+            await prisma.deal.update({ where: { id: pendingDeal.id }, data: { isPublished: true } });
+          }
         }
       }
     } catch (drainErr: any) {
@@ -553,6 +594,15 @@ export async function GET(request: Request) {
           isPublished: false,
         }
       });
+
+      // FIX: Block expensive/irrelevant products from main channel (mobiles, robot cleaners, etc.)
+      const blockedFromMain = isBlockedFromMain(finalTitle);
+      if (blockedFromMain) {
+        console.log(`🚫 BLOCKED FROM MAIN: "${finalTitle.substring(0, 40)}" — product type not suitable for small growing channel.`);
+        // Still saved in DB — hostel cron can pick it up if it qualifies
+        dealsSkippedCount++;
+        continue;
+      }
 
       // Only auto-publish to Telegram if we have a working affiliate link AND it's not silent hours
       if (hasWorkingAffiliate && !isSilent) {
