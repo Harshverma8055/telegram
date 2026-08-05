@@ -10,10 +10,10 @@ import { getAffiliateUrl } from '@/lib/affiliate';
 // Main channel has its own independent cron at /api/cron
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
-// How many wishlist items to check per cron run
-const BATCH_SIZE = 15;
-// Max execution time in ms (50s safety guard for Vercel 60s maxDuration)
-const MAX_MS = 50000;
+// How many wishlist items to check per cron run (reduced to fit 30s cron-job.org timeout)
+const BATCH_SIZE = 6;
+// Max execution time in ms (must finish before cron-job.org's 30s timeout)
+const MAX_MS = 23000;
 
 function isSilentHoursIST(): boolean {
   const now = new Date();

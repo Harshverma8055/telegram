@@ -29,10 +29,10 @@ export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
 // Process up to 20 deals per run
-const BATCH_SIZE = 20;
-const MAX_POSTS_PER_RUN = 3; // Post up to 3 deals per run (increased for hostel channel growth)
-const MAX_MS = 50000; // 50 seconds safety guard (well within 60s maxDuration)
-const HOSTEL_COOLDOWN_MIN = 20; // Min 20 min between hostel posts to prevent spam
+const BATCH_SIZE = 10;
+const MAX_POSTS_PER_RUN = 3;
+const MAX_MS = 23000; // Must complete within 25s (cron-job.org timeout is 30s)
+const HOSTEL_COOLDOWN_MIN = 20;
 
 function isSilentHoursIST(): boolean {
   const now = new Date();
