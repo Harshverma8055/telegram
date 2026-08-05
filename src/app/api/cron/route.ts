@@ -39,21 +39,39 @@ const LOW_PRIORITY_KEYWORDS = [
 ];
 
 // ❌ These products MUST NEVER be posted to the main channel.
-// The main channel is small (6 subscribers) and growing. Expensive items
-// like mobiles take long research time and irritate new users.
-// Customers who want mobiles research independently — we add no value there.
+// Small growing channel (7 subscribers) needs affordable impulse-buy deals only.
+// Expensive research items (phones, TVs) irritate users who already knew about them.
 const BLOCKED_FROM_MAIN_KEYWORDS = [
-  'smartphone', 'mobile phone', 'android phone', '5g phone', '5g mobile',
-  'iphone', 'samsung galaxy', 'oneplus', 'realme', 'redmi', 'poco phone',
+  // Phones — all major Indian brands
+  'smartphone', 'mobile phone', 'android phone',
+  'iphone', 'samsung galaxy', 'samsung m', 'samsung s2', 'samsung f',
+  'oneplus', 'realme narzo', 'realme c', 'realme gt', 'realme p',
+  'redmi note', 'redmi a', 'redmi 1', 'redmi 2', 'redmi 3',
+  'poco x', 'poco m', 'poco f', 'poco c',
+  'vivo x', 'vivo y', 'vivo v', 'vivo t',
+  'oppo a', 'oppo f', 'oppo reno', 'oppo k',
+  'iqoo z', 'iqoo neo', 'iqoo 1', 'iqoo 2', 'iqoo 3',
+  'nothing phone', 'motorola edge', 'motorola g', 'nokia c', 'nokia g',
+  // TVs
+  'smart tv', 'oled tv', 'qled tv', 'led tv', '4k tv', '8k tv', 'android tv',
+  // Robots / Appliances
   'robot vacuum', 'robot cleaner', 'robovac', 'roomba', 'robot mop',
-  'smart tv', 'oled tv', 'qled tv', 'led tv', '4k tv', '8k tv',
   'air purifier', 'water purifier', 'ro system', 'split ac',
+  // Vehicles
   'electric vehicle', 'e-scooter', 'electric scooter'
 ];
 
-function isBlockedFromMain(title: string): boolean {
+function isBlockedFromMain(title: string, price: number = 0): boolean {
   const lower = title.toLowerCase();
-  return BLOCKED_FROM_MAIN_KEYWORDS.some(kw => lower.includes(kw));
+  // Keyword-based block
+  if (BLOCKED_FROM_MAIN_KEYWORDS.some(kw => lower.includes(kw))) return true;
+  // Smart phone-spec detection: title has both "gb ram" and "storage" = phone/tablet
+  // Combined with high price to avoid blocking USB hubs / laptops cheaply
+  const hasRam = lower.includes('gb ram');
+  const hasStorage = lower.includes('gb storage') || lower.includes('gb rom') || lower.includes('gb inbuilt');
+  const hasChip = lower.includes('snapdragon') || lower.includes('dimensity') || lower.includes('mediatek helio') || lower.includes('exynos');
+  if ((hasRam && hasStorage && price > 3000) || (hasChip && price > 5000)) return true;
+  return false;
 }
 
 function isToysDeal(title: string): boolean {
@@ -497,22 +515,26 @@ export async function GET(request: Request) {
         continue;
       }
 
-      // De-duplicate color/RAM/storage variants of the same product in the same run
+      // De-duplicate color/size/variant duplicates of the same product within one run
+      // FIX: Increased prefix 30 → 50 chars so "AYSIS Shoe Rack 3-Door" and
+      // "AYSIS Shoe Rack 5-Door" are treated as the SAME product family.
       const cleanTitle = sanitizeTitle(finalTitle);
-      const titlePrefix = cleanTitle.substring(0, 30).toLowerCase().trim();
+      const titlePrefix = cleanTitle.substring(0, 50).toLowerCase().trim();
       if (processedTitlePrefixes.has(titlePrefix)) {
-        console.log(`🚫 SKIPPED: Similar product variant already processed in this run: "${finalTitle}"`);
+        console.log(`🚫 SKIPPED (in-run dedup): Variant already processed this run: "${finalTitle}"`);
         dealsSkippedCount++;
         continue;
       }
       processedTitlePrefixes.add(titlePrefix);
 
       // De-duplicate against recently posted deals in the last 24 hours
+      // FIX: Use 50-char prefix (was 30) to catch brand+product-type duplicates.
+      // e.g. "AYSIS Premium Foldable Plastic Shoe Rack for Hom" matches all door variants.
       const recentSimilarDeal = await prisma.deal.findFirst({
         where: {
           product: {
             title: {
-              startsWith: cleanTitle.substring(0, 30),
+              startsWith: cleanTitle.substring(0, 50),
               mode: 'insensitive'
             }
           },
@@ -523,7 +545,7 @@ export async function GET(request: Request) {
         }
       });
       if (recentSimilarDeal) {
-        console.log(`🚫 SKIPPED: Similar product already posted in the last 24 hours: "${finalTitle}"`);
+        console.log(`🚫 SKIPPED (24h dedup): Same product family already posted: "${finalTitle.substring(0, 50)}"`);
         dealsSkippedCount++;
         continue;
       }
@@ -595,29 +617,44 @@ export async function GET(request: Request) {
         }
       });
 
-      // FIX: Block expensive/irrelevant products from main channel (mobiles, robot cleaners, etc.)
-      const blockedFromMain = isBlockedFromMain(finalTitle);
+      // FIX: Block expensive/irrelevant products (mobiles, TVs, robot cleaners)
+      // Pass finalDealPrice so smart phone-spec detection can use price threshold
+      const blockedFromMain = isBlockedFromMain(finalTitle, finalDealPrice);
       if (blockedFromMain) {
-        console.log(`🚫 BLOCKED FROM MAIN: "${finalTitle.substring(0, 40)}" — product type not suitable for small growing channel.`);
-        // Still saved in DB — hostel cron can pick it up if it qualifies
+        console.log(`🚫 BLOCKED FROM MAIN: "${finalTitle.substring(0, 50)}" — product type restricted from small channel.`);
+        // Still saved in DB — hostel cron will evaluate it independently
         dealsSkippedCount++;
         continue;
       }
 
-      // Only auto-publish to Telegram if we have a working affiliate link AND it's not silent hours
-      if (hasWorkingAffiliate && !isSilent) {
+      // FIX: Fresh scrapes now respect the same 45-min cooldown as the queue drain.
+      // Previously, fresh scrapes bypassed cooldown and published immediately,
+      // causing 5 shoe-rack variants to post within 2 hours.
+      // Now: if a deal was posted < 45 min ago, this deal is saved as pending
+      // and the queue drain will publish it later with proper spacing.
+      const lastPostedDeal = await prisma.deal.findFirst({
+        where: { isPublished: true, publishedAt: { not: null } },
+        orderBy: { publishedAt: 'desc' }
+      });
+      const minsSinceLastMainPost = lastPostedDeal?.publishedAt
+        ? (Date.now() - new Date(lastPostedDeal.publishedAt).getTime()) / (1000 * 60)
+        : 999;
+
+      // Only auto-publish to Telegram if we have affiliate AND not silent AND 45-min gap met
+      if (hasWorkingAffiliate && !isSilent && minsSinceLastMainPost >= 45) {
         try {
           await publishToTelegram(deal.id, TELEGRAM_CHANNEL);
-          console.log(`✅ AUTO-PUBLISHED (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
-          // NOTE: Hostel channel posting is handled independently by /api/cron-hostel
-          // using the Smart Student Filter. Do NOT add hostel posting here.
+          console.log(`✅ AUTO-PUBLISHED (${dealInfo.platform}): "${finalTitle.substring(0, 40)}..." [${priceVerified ? 'VERIFIED ✓' : 'NO PRICE'}]`);
+          // NOTE: Hostel channel posting is handled independently by /api/cron-hostel.
         } catch (err) {
           console.error(`Failed to publish deal to main channel:`, err);
         }
+      } else if (hasWorkingAffiliate && !isSilent && minsSinceLastMainPost < 45) {
+        console.log(`⏳ QUEUED (cooldown): ${Math.round(minsSinceLastMainPost)}min since last post < 45min. "${finalTitle.substring(0, 40)}" saved for queue drain.`);
       } else if (hasWorkingAffiliate && isSilent) {
-        console.log(`💤 SILENT HOURS ACTIVE (IST): Saved "${finalTitle.substring(0, 30)}..." to queue without publishing.`);
+        console.log(`💤 SILENT HOURS: Saved "${finalTitle.substring(0, 40)}" to queue.`);
       } else {
-        console.log(`📋 SAVED AS PENDING (${dealInfo.platform}): "${finalTitle.substring(0, 30)}..." — Needs manual EarnKaro link before publishing`);
+        console.log(`📋 PENDING (${dealInfo.platform}): "${finalTitle.substring(0, 40)}" — No affiliate link.`);
       }
     }
 
