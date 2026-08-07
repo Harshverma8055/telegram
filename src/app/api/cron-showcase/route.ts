@@ -2,6 +2,7 @@
 // 🎓 HOSTEL SHOWCASE CRON — Daily Student Essential Rotation
 //
 // This cron is DIFFERENT from cron-wishlist.
+// Respects the same 15/day daily cap as cron-hostel.
 //
 // cron-wishlist   = Waits for price DROP target to be met → then posts
 // cron-showcase   = Posts wishlist products DAILY regardless of price
@@ -33,11 +34,22 @@ import { getAffiliateUrl } from '@/lib/affiliate';
 
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
-// How many products to showcase per run (keep at 1 to avoid spamming)
+// How many products to showcase per run
 const SHOWCASE_PER_RUN = 1;
 
 // Don't showcase the same product more than once every 7 days
 const SHOWCASE_COOLDOWN_DAYS = 7;
+
+// Max hostel posts per day (shared limit with cron-hostel)
+const MAX_HOSTEL_POSTS_PER_DAY = 15;
+
+function getTodayMidnightIST(): Date {
+  const now = new Date();
+  const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const istDate = new Date(istString);
+  istDate.setHours(0, 0, 0, 0);
+  return new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+}
 
 function isSilentHoursIST(): boolean {
   const now = new Date();
@@ -116,6 +128,23 @@ export async function GET(request: Request) {
   let posted = 0;
 
   try {
+    // ── DAILY CAP: Check total hostel posts today ──────────────
+    const todayMidnight = getTodayMidnightIST();
+    const hostelTodayCount = await prisma.$queryRawUnsafe<{count: bigint}[]>(
+      `SELECT COUNT(*) as count FROM "Deal" WHERE "isPublishedHostel" = true AND "publishedHostelAt" >= $1`,
+      todayMidnight
+    );
+    const todayCount = Number(hostelTodayCount[0]?.count ?? 0);
+    logs.push(`Today hostel posts: ${todayCount}/${MAX_HOSTEL_POSTS_PER_DAY}`);
+
+    if (todayCount >= MAX_HOSTEL_POSTS_PER_DAY) {
+      return NextResponse.json({
+        success: true,
+        message: `Daily cap reached (${todayCount}/${MAX_HOSTEL_POSTS_PER_DAY}). Showcase skipped.`,
+        logs,
+      });
+    }
+    // ──────────────────────────────────────────────────────────
     // Pick the wishlist products that haven't been showcased in the longest time.
     // We use last_updated ASC — the oldest-checked items are showcased first.
     // After showcasing, we update last_updated so they rotate to end of queue.

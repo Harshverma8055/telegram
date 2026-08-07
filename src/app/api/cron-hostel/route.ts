@@ -1,21 +1,18 @@
 // =====================================================================
-// 🎓 HOSTEL CHANNEL CRON — Independent Student Deal Filter
+// 🎓 HOSTEL CHANNEL CRON — Smart Student Deal Filter
 //
-// This cron runs independently from the main cron.
-// It reads deals already saved to the database by the main cron,
-// scores them using the Smart Student Filter, and posts qualified
-// ones to @hosteldeals.
+// FIX LOG (Aug 2026):
+// Problem: 500+ posts/day → users irritated
+// Root cause: No daily cap + no category dedup + 3 posts/run × 180 runs/day
 //
-// ⚠️  This file does NOT scrape Amazon or any external site.
-// It only reads from our own database and applies the filter.
+// FIXES APPLIED:
+// 1. DAILY CAP: Max 15 posts/day to hostel channel (hard limit)
+// 2. CATEGORY DEDUP: Same category not posted within 4 hours
+//    e.g., if fan posted at 10 AM → no other fan until 2 PM
+// 3. MAX 1 POST PER RUN (was 3)
+// 4. COOLDOWN: 45 min between any two hostel posts
 //
-// SAFE TO MODIFY:
-// - The number of deals processed per run (BATCH_SIZE)
-// - The minimum score threshold (imported from hostel-filter.ts)
-//
-// DO NOT MODIFY:
-// - The import from stealth-scraper.ts (not used here, but don't add it)
-// - The publishToTelegram function call pattern
+// RESULT: ~10-15 varied posts/day instead of 500+ spam
 // =====================================================================
 
 import { NextResponse } from 'next/server';
@@ -24,15 +21,54 @@ import { publishToTelegram } from '@/lib/telegram';
 import { shouldPostToHostel, STUDENT_SCORE_THRESHOLD } from '@/lib/hostel-filter';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
+export const maxDuration = 30;
 
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
-// Process up to 20 deals per run
 const BATCH_SIZE = 10;
-const MAX_POSTS_PER_RUN = 3;
-const MAX_MS = 23000; // Must complete within 25s (cron-job.org timeout is 30s)
-const HOSTEL_COOLDOWN_MIN = 20;
+const MAX_POSTS_PER_RUN = 1;            // ← Only 1 post per cron run (was 3)
+const MAX_MS = 23000;
+const HOSTEL_COOLDOWN_MIN = 45;         // ← 45 min between posts (was 20)
+const MAX_HOSTEL_POSTS_PER_DAY = 15;    // ← Hard daily cap
+const CATEGORY_COOLDOWN_HOURS = 4;      // ← Same category blocked for 4 hours
+
+// =====================================================================
+// CATEGORY DETECTION — Extracts product category from title
+// Used to prevent posting 8 fans or 10 t-shirts in a row
+// =====================================================================
+function extractCategory(title: string): string {
+  const t = title.toLowerCase();
+  if (t.match(/\bfan\b|table fan|ceiling fan|desk fan|portable fan|mini fan|cooler/)) return 'fans';
+  if (t.match(/t[- ]?shirt|polo|half sleeve|full sleeve|round neck tee/)) return 'clothing_tshirt';
+  if (t.match(/jeans|trouser|pant\b|chino/)) return 'clothing_bottoms';
+  if (t.match(/smartwatch|smart watch|digital watch|analog watch|\bwatch\b|fitness band|smart band/)) return 'watches';
+  if (t.match(/phone case|mobile case|back cover|back case|phone cover|tempered glass/)) return 'phone_accessories';
+  if (t.match(/bracelet|bangle|necklace|chain|anklet|jewellery|jewelry|ring\b/)) return 'jewelry';
+  if (t.match(/keychain|key chain|key ring/)) return 'keychains';
+  if (t.match(/resistance band|yoga band|exercise band|loop band|workout band|gym band/)) return 'fitness_bands';
+  if (t.match(/mosquito|electric bat|racket bat|insect killer/)) return 'mosquito_control';
+  if (t.match(/kettle|electric kettle/)) return 'kettles';
+  if (t.match(/backpack|laptop bag|school bag|college bag/)) return 'bags';
+  if (t.match(/earphone|earbuds|headphone|headset|neckband/)) return 'earphones';
+  if (t.match(/charger|power bank|charging cable|usb cable/)) return 'chargers';
+  if (t.match(/pen\b|pencil|notebook|diary|highlighter|marker/)) return 'stationery';
+  if (t.match(/towel/)) return 'towels';
+  if (t.match(/shoes|sneaker|boot\b|sport shoe/)) return 'footwear';
+  if (t.match(/slipper|chappal|sandal|flip flop/)) return 'footwear_casual';
+  if (t.match(/curtain|blind\b/)) return 'curtains';
+  if (t.match(/iron\b|steam iron/)) return 'iron';
+  if (t.match(/umbrella|raincoat/)) return 'umbrella';
+  if (t.match(/whiteboard|blackboard|chalk board|notice board/)) return 'boards';
+  if (t.match(/wallet|card holder|purse/)) return 'wallets';
+  if (t.match(/mug|cup\b|thermos|flask\b|bottle\b|sipper/)) return 'bottles';
+  if (t.match(/clock\b|alarm|wall clock/)) return 'clocks';
+  if (t.match(/light\b|lamp\b|led strip|fairy light|string light/)) return 'lights';
+  if (t.match(/mouse\b|keyboard|usb hub|adapter\b|hdmi/)) return 'computer_accessories';
+  if (t.match(/shampoo|conditioner|serum|face wash|moisturizer|sunscreen/)) return 'skincare';
+  if (t.match(/deodorant|perfume|body spray/)) return 'fragrance';
+  if (t.match(/protein|supplement|multivitamin/)) return 'supplements';
+  return 'general';
+}
 
 function isSilentHoursIST(): boolean {
   const now = new Date();
@@ -45,10 +81,18 @@ function isSilentHoursIST(): boolean {
   return false;
 }
 
+function getTodayMidnightIST(): Date {
+  const now = new Date();
+  const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const istDate = new Date(istString);
+  istDate.setHours(0, 0, 0, 0);
+  // Convert back to UTC (IST = UTC+5:30)
+  return new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+}
+
 export async function GET(request: Request) {
   const startTime = Date.now();
 
-  // Support both Authorization header and ?key= query parameter
   const { searchParams } = new URL(request.url);
   const key = searchParams.get('key');
   const authHeader = request.headers.get('authorization');
@@ -71,20 +115,57 @@ export async function GET(request: Request) {
 
   try {
     // =========================================================
-    // 🔍 DUAL PIPELINE: Hostel gets deals from TWO sources
-    //
-    // Pipeline A: Deals already published to main channel ✅
-    // Pipeline B: Deals QUEUED but not yet on main channel ✅ NEW
-    //
-    // WHY: Main channel can be slow (Vercel CPU limits, 45-min
-    // cooldown). Previously hostel got ZERO deals during those
-    // slow periods. Now hostel is fully independent.
+    // GUARD 1: Daily cap check
+    // If hostel channel already got MAX_HOSTEL_POSTS_PER_DAY
+    // deals today → stop immediately, no more posts today.
     // =========================================================
+    const todayMidnight = getTodayMidnightIST();
+    const hostelTodayCount = await prisma.deal.count({
+      where: {
+        isPublishedHostel: true,
+        publishedHostelAt: { gte: todayMidnight },
+      },
+    });
 
-    // Use a wide 72-hour window so no deals are missed
+    logs.push(`Today's hostel posts: ${hostelTodayCount}/${MAX_HOSTEL_POSTS_PER_DAY}`);
+
+    if (hostelTodayCount >= MAX_HOSTEL_POSTS_PER_DAY) {
+      console.log(`🛑 [cron-hostel] Daily cap reached: ${hostelTodayCount}/${MAX_HOSTEL_POSTS_PER_DAY}`);
+      return NextResponse.json({
+        success: true,
+        message: `Daily hostel cap reached (${hostelTodayCount}/${MAX_HOSTEL_POSTS_PER_DAY}). Come back tomorrow!`,
+        hostelTodayCount,
+        logs,
+      });
+    }
+
+    // =========================================================
+    // GUARD 2: Category dedup — what categories posted recently?
+    // Don't allow same category within CATEGORY_COOLDOWN_HOURS
+    // =========================================================
+    const categoryWindowStart = new Date(Date.now() - CATEGORY_COOLDOWN_HOURS * 60 * 60 * 1000);
+    const recentHostelDeals = await prisma.deal.findMany({
+      where: {
+        isPublishedHostel: true,
+        publishedHostelAt: { gte: categoryWindowStart },
+      },
+      select: { product: { select: { title: true } } },
+    });
+
+    const recentCategories = new Set(
+      recentHostelDeals
+        .map(d => extractCategory(d.product?.title || ''))
+        .filter(cat => cat !== 'general') // 'general' is too broad to block
+    );
+
+    logs.push(`Categories blocked (posted in last ${CATEGORY_COOLDOWN_HOURS}h): [${[...recentCategories].join(', ')}]`);
+    console.log(`🎓 [cron-hostel] Blocked categories: ${[...recentCategories].join(', ')}`);
+
+    // =========================================================
+    // DUAL PIPELINE: Get deals from main + queue
+    // =========================================================
     const seventyTwoHoursAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
 
-    // Pipeline A: Deals published to main channel, not yet sent to hostel
     const mainChannelDeals = await prisma.deal.findMany({
       where: {
         isPublished: true,
@@ -96,8 +177,6 @@ export async function GET(request: Request) {
       take: BATCH_SIZE,
     });
 
-    // Pipeline B: Deals queued (not published to main yet) — direct to hostel
-    // These are deals saved by the main scraper but waiting for 45-min cooldown
     const directDeals = await prisma.deal.findMany({
       where: {
         isPublished: false,
@@ -110,7 +189,6 @@ export async function GET(request: Request) {
       take: BATCH_SIZE,
     });
 
-    // Merge both pipelines, deduplicate by ID, sort by score
     const seenIds = new Set<string>();
     const pendingDeals = [...mainChannelDeals, ...directDeals]
       .filter(d => {
@@ -121,12 +199,11 @@ export async function GET(request: Request) {
       .sort((a, b) => b.dealScore - a.dealScore)
       .slice(0, BATCH_SIZE);
 
-    logs.push(`Pipeline A (main channel): ${mainChannelDeals.length} deals`);
-    logs.push(`Pipeline B (direct/queued): ${directDeals.length} deals`);
-    logs.push(`Total to evaluate: ${pendingDeals.length} deals`);
-    console.log(`🎓 [cron-hostel] A=${mainChannelDeals.length} B=${directDeals.length} Total=${pendingDeals.length}`);
+    logs.push(`Pipeline A: ${mainChannelDeals.length} | Pipeline B: ${directDeals.length} | Evaluating: ${pendingDeals.length}`);
 
-    // Check time since last hostel post (to enforce cooldown between hostel posts)
+    // =========================================================
+    // GUARD 3: Cooldown between posts
+    // =========================================================
     const lastHostelPost = await prisma.deal.findFirst({
       where: { isPublishedHostel: true, publishedHostelAt: { not: null } },
       orderBy: { publishedHostelAt: 'desc' },
@@ -135,12 +212,23 @@ export async function GET(request: Request) {
       ? (Date.now() - new Date(lastHostelPost.publishedHostelAt).getTime()) / (1000 * 60)
       : 999;
 
-    logs.push(`Time since last hostel post: ${Math.round(minsSinceLastHostelPost)} min`);
+    logs.push(`Mins since last hostel post: ${Math.round(minsSinceLastHostelPost)} (cooldown: ${HOSTEL_COOLDOWN_MIN}min)`);
 
+    if (!isSilent && minsSinceLastHostelPost < HOSTEL_COOLDOWN_MIN) {
+      console.log(`⏳ [cron-hostel] Cooldown active. ${Math.round(HOSTEL_COOLDOWN_MIN - minsSinceLastHostelPost)} min remaining.`);
+      return NextResponse.json({
+        success: true,
+        message: `Cooldown: ${Math.round(HOSTEL_COOLDOWN_MIN - minsSinceLastHostelPost)} min remaining.`,
+        logs,
+      });
+    }
+
+    // =========================================================
+    // MAIN LOOP: Evaluate and post deals
+    // =========================================================
     for (const deal of pendingDeals) {
-      // Timeout guard
       if (Date.now() - startTime > MAX_MS) {
-        logs.push(`⏱️ Timeout after processing ${processed} deals.`);
+        logs.push(`⏱️ Timeout after ${processed} deals.`);
         break;
       }
 
@@ -152,16 +240,9 @@ export async function GET(request: Request) {
       const discountPct = deal.discountPct || 0;
       const platform = deal.platform?.slug || 'amazon';
 
-      // Run through the Smart Student Filter
-      const filterResult = shouldPostToHostel({
-        title,
-        price,
-        originalPrice,
-        discountPct,
-        platform,
-      });
+      // Student filter check
+      const filterResult = shouldPostToHostel({ title, price, originalPrice, discountPct, platform });
 
-      // Save the student score for analytics
       await prisma.deal.update({
         where: { id: deal.id },
         data: { studentScore: filterResult.score },
@@ -169,34 +250,31 @@ export async function GET(request: Request) {
 
       if (!filterResult.shouldPost) {
         skipped++;
-        logs.push(`⏭️ Skipped: "${title.substring(0, 40)}" (score: ${filterResult.score} < ${STUDENT_SCORE_THRESHOLD})`);
-
-        // Mark as hostel-processed so we don't re-evaluate next run
+        logs.push(`⏭️ Skipped (score ${filterResult.score}): "${title.substring(0, 40)}"`);
         await prisma.deal.update({
           where: { id: deal.id },
-          data: { isPublishedHostel: true },
+          data: { isPublishedHostel: true }, // Mark done so we don't re-evaluate
         });
         continue;
       }
 
-      // 🎯 QUALIFIED FOR HOSTEL CHANNEL!
-      logs.push(`✅ Qualified: "${title.substring(0, 40)}" (score: ${filterResult.score} ${filterResult.dealTag} ${filterResult.category})`);
-      console.log(`🎓 [cron-hostel] QUALIFIED: score=${filterResult.score} "${title.substring(0, 50)}"`);
+      // ── CATEGORY DEDUP CHECK ──────────────────────────────────
+      const dealCategory = extractCategory(title);
+      if (dealCategory !== 'general' && recentCategories.has(dealCategory)) {
+        logs.push(`🚫 Category repeat blocked [${dealCategory}]: "${title.substring(0, 40)}"`);
+        skipped++;
+        // Don't mark isPublishedHostel = true here!
+        // Keep it queued → next run (4h later) it won't be blocked anymore
+        continue;
+      }
+      // ─────────────────────────────────────────────────────────
+
+      logs.push(`✅ Qualified (score ${filterResult.score}, cat:${dealCategory}): "${title.substring(0, 40)}"`);
 
       if (!isSilent) {
         if (forwarded >= MAX_POSTS_PER_RUN) {
-          logs.push(`⏳ Post limit (${MAX_POSTS_PER_RUN}) reached. "${title.substring(0, 40)}" stays queued.`);
-          continue;
-        }
-
-        // Hostel cooldown: don't post if last hostel post was < 20 min ago
-        const currentMinsSinceLast = lastHostelPost?.publishedHostelAt
-          ? (Date.now() - new Date(lastHostelPost.publishedHostelAt).getTime()) / (1000 * 60) - (forwarded * HOSTEL_COOLDOWN_MIN)
-          : 999;
-
-        if (forwarded > 0 && currentMinsSinceLast < HOSTEL_COOLDOWN_MIN) {
-          logs.push(`⏳ Hostel cooldown active. "${title.substring(0, 40)}" will post next run.`);
-          continue;
+          logs.push(`⏳ Run limit (${MAX_POSTS_PER_RUN}) reached. Queued for next run.`);
+          break;
         }
 
         try {
@@ -204,22 +282,21 @@ export async function GET(request: Request) {
 
           await prisma.deal.update({
             where: { id: deal.id },
-            data: {
-              isPublishedHostel: true,
-              publishedHostelAt: new Date(),
-            },
+            data: { isPublishedHostel: true, publishedHostelAt: new Date() },
           });
 
           forwarded++;
-          logs.push(`📤 Posted to ${HOSTEL_CHANNEL}: "${title.substring(0, 40)}"`);
-          console.log(`✅ [cron-hostel] Posted to ${HOSTEL_CHANNEL}: "${title.substring(0, 40)}"`);
+          // Add this category to blocked set for THIS run
+          if (dealCategory !== 'general') recentCategories.add(dealCategory);
+
+          logs.push(`📤 Posted: "${title.substring(0, 40)}" [${dealCategory}]`);
+          console.log(`✅ [cron-hostel] Posted: "${title.substring(0, 50)}" [${dealCategory}]`);
         } catch (err: any) {
-          logs.push(`❌ Failed to post: ${err.message}`);
+          logs.push(`❌ Post failed: ${err.message}`);
           console.error(`[cron-hostel] Post error:`, err.message);
         }
       } else {
-        // During silent hours, leave isPublishedHostel = false so morning cron posts them!
-        logs.push(`💤 Silent hours — deal qualified, keeping queued for morning posting.`);
+        logs.push(`💤 Silent hours — qualified deal kept for morning.`);
       }
     }
 
@@ -229,15 +306,7 @@ export async function GET(request: Request) {
   }
 
   const elapsed = Math.round((Date.now() - startTime) / 1000);
-  console.log(`✅ [cron-hostel] Done in ${elapsed}s. Processed: ${processed}, Forwarded: ${forwarded}, Skipped: ${skipped}`);
+  console.log(`✅ [cron-hostel] Done in ${elapsed}s. Processed:${processed} Posted:${forwarded} Skipped:${skipped}`);
 
-  return NextResponse.json({
-    success: true,
-    elapsed: `${elapsed}s`,
-    processed,
-    forwarded,
-    skipped,
-    threshold: STUDENT_SCORE_THRESHOLD,
-    logs,
-  });
+  return NextResponse.json({ success: true, elapsed: `${elapsed}s`, processed, forwarded, skipped, hostelTodayCount: 0, logs });
 }
