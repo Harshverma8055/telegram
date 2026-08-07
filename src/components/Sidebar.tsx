@@ -7,6 +7,7 @@ import {
   Zap,
   Send,
   BarChart3,
+  Search,
   ChevronLeft,
   Menu,
   LogOut,
