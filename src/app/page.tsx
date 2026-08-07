@@ -29,6 +29,7 @@ import TelegramView from '@/components/views/TelegramView';
 import RecurringView from '@/components/views/RecurringView';
 import WatchlistView from '@/components/views/WatchlistView';
 import WishlistView from '@/components/views/WishlistView';
+import CuelinkWatchlistView from '@/components/views/CuelinkWatchlistView';
 import {
   mockDashboardStats,
   mockRevenueTimeline,
@@ -323,12 +324,13 @@ export default function App() {
       case 'dashboard':
         return <DashboardView />;
       case 'deals':
-      case 'flash-sales':
         return <DealsView />;
-      case 'price-drops':
-        return <WatchlistView />;
-      case 'wishlist':
+      case 'amazon-wishlist':
         return <WishlistView />;
+      case 'cuelink-watchlist':
+        return <CuelinkWatchlistView />;
+      case 'manual-upload':
+        return <WatchlistView />;
       case 'scrapers':
         return <ScrapersView />;
       case 'telegram':
@@ -339,7 +341,7 @@ export default function App() {
         return (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
             <h2 style={{ fontSize: '24px', color: 'var(--text-primary)', marginBottom: '12px' }}>Coming Soon</h2>
-            <p>The <strong>{activeSection.replace('-', ' ')}</strong> module is under active development for Phase 2.</p>
+            <p>This module is under development.</p>
           </div>
         );
     }
@@ -348,13 +350,13 @@ export default function App() {
   const getPageTitle = () => {
     switch (activeSection) {
       case 'dashboard': return 'Dashboard';
-      case 'deals': return 'Deal Engine';
-      case 'flash-sales': return 'Flash Sales';
-      case 'price-drops': return 'Price Tracker Watchlist';
-      case 'wishlist': return 'Product Research & Wishlist';
-      case 'scrapers': return 'Scraper Engine';
-      case 'telegram': return 'Telegram Automation';
-      case 'recurring': return 'Smart Recurring Reposter';
+      case 'deals': return 'All Deals';
+      case 'amazon-wishlist': return 'Amazon Wishlist';
+      case 'cuelink-watchlist': return 'Flipkart / Myntra / Ajio Watchlist';
+      case 'manual-upload': return 'Manual Product Upload';
+      case 'scrapers': return 'Scraper Status';
+      case 'telegram': return 'Telegram Channels';
+      case 'recurring': return 'Smart Reposter';
       default: return activeSection.charAt(0).toUpperCase() + activeSection.slice(1).replace('-', ' ');
     }
   };
@@ -362,12 +364,13 @@ export default function App() {
   const getPageSubtitle = () => {
     switch (activeSection) {
       case 'dashboard': return "Welcome back, here's what's happening today.";
-      case 'deals': return "Review, score, and publish the latest deals.";
-      case 'scrapers': return "Monitor live bot performance across 24 platforms.";
-      case 'telegram': return "Manage multi-channel auto-publishing.";
-      case 'recurring': return "Schedule and manage automated recurring repost campaigns.";
-      case 'price-drops': return 'Add specific products to track their prices hourly and alert your Telegram channel on drops.';
-      case 'wishlist': return 'Crawl and build a wishlist of 700-1000 real college student & hostel essentials from Amazon India.';
+      case 'deals': return 'All scraped and published deals across channels.';
+      case 'amazon-wishlist': return 'Amazon products being monitored for price drops. Posts to hostel channel when target price is hit.';
+      case 'cuelink-watchlist': return 'Flipkart, Myntra & Ajio products monitored via Cuelinks. Auto-posts to hostel channel on price drop.';
+      case 'manual-upload': return 'Manually add specific Amazon products to track their price.';
+      case 'scrapers': return 'Live status of all 4 automated crons: Main, Hostel, Amazon Wishlist, Cuelink Wishlist.';
+      case 'telegram': return 'Manage @fantasticofffer (main) and @hosteldeals channels.';
+      case 'recurring': return 'Schedule recurring posts to channels.';
       default: return '';
     }
   };

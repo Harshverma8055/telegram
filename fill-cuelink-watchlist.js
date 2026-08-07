@@ -46,31 +46,40 @@ const BOT_IDENTITIES = [
   { 'User-Agent': 'Twitterbot/1.0', 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
 ];
 
-// ─── STUDENT CATEGORIES ───────────────────────────────────────────────
+// ─── STUDENT CATEGORIES ─────────────────────────────────────────────────────────
+// Each category has MULTIPLE queries → more variety, more unique products
+// Running once gives ~500 products. Duplicates are auto-skipped.
 const CATEGORIES = [
-  { key: 'fans',       query: 'table fan hostel room',          category: 'Electronics', subcategory: 'Fans',           targetDiscount: 20 },
-  { key: 'earphones',  query: 'earphones wired budget',         category: 'Electronics', subcategory: 'Earphones',      targetDiscount: 25 },
-  { key: 'earbuds',    query: 'truly wireless earbuds budget',  category: 'Electronics', subcategory: 'Earbuds',        targetDiscount: 30 },
-  { key: 'speaker',    query: 'bluetooth speaker portable',     category: 'Electronics', subcategory: 'Speakers',       targetDiscount: 25 },
-  { key: 'powerbank',  query: 'power bank 10000mah',            category: 'Electronics', subcategory: 'Power Banks',    targetDiscount: 20 },
-  { key: 'charger',    query: 'fast charger type c cable',      category: 'Electronics', subcategory: 'Chargers',       targetDiscount: 20 },
-  { key: 'laptop_bag', query: 'laptop bag backpack 15.6 inch',  category: 'Bags',        subcategory: 'Laptop Bags',    targetDiscount: 25 },
-  { key: 'backpack',   query: 'college backpack men women',     category: 'Bags',        subcategory: 'Backpacks',      targetDiscount: 25 },
-  { key: 'tshirt',     query: 'men polo t-shirt pack',          category: 'Fashion',     subcategory: 'T-Shirts',       targetDiscount: 40 },
-  { key: 'shoes',      query: 'men casual running shoes',       category: 'Fashion',     subcategory: 'Casual Shoes',   targetDiscount: 35 },
-  { key: 'slippers',   query: 'men slippers flip flops',        category: 'Fashion',     subcategory: 'Slippers',       targetDiscount: 30 },
-  { key: 'bottle',     query: 'steel water bottle flask',       category: 'Kitchen',     subcategory: 'Bottles',        targetDiscount: 20 },
-  { key: 'umbrella',   query: 'travel umbrella compact',        category: 'Lifestyle',   subcategory: 'Umbrellas',      targetDiscount: 20 },
-  { key: 'towel',      query: 'bath towel cotton quick dry',    category: 'Home',        subcategory: 'Towels',         targetDiscount: 30 },
-  { key: 'stationery', query: 'pen set notebook diary',         category: 'Stationery',  subcategory: 'Pen & Notebooks',targetDiscount: 20 },
-  { key: 'lock',       query: 'combination padlock room',       category: 'Home',        subcategory: 'Locks',          targetDiscount: 20 },
-  { key: 'lamp',       query: 'study desk lamp led',            category: 'Furniture',   subcategory: 'Lamps',          targetDiscount: 25 },
-  { key: 'watch',      query: 'digital watch men budget',       category: 'Watches',     subcategory: 'Digital Watches',targetDiscount: 35 },
-  { key: 'skincare',   query: 'men face wash moisturizer',      category: 'Beauty',      subcategory: 'Skincare',       targetDiscount: 30 },
-  { key: 'fitness',    query: 'resistance band gym set',        category: 'Sports',      subcategory: 'Fitness Bands',  targetDiscount: 25 },
+  { key: 'fans',       queries: ['table fan hostel room', 'mini desk fan portable', 'usb fan silent rechargeable'],           category: 'Electronics', subcategory: 'Fans',            targetDiscount: 20 },
+  { key: 'earphones',  queries: ['earphones wired budget under 500', 'boat earphones wired', 'jbl earphones in-ear'],         category: 'Electronics', subcategory: 'Earphones',       targetDiscount: 25 },
+  { key: 'earbuds',    queries: ['truly wireless earbuds budget', 'boat airdopes earbuds', 'boult earbuds under 1000'],       category: 'Electronics', subcategory: 'Earbuds',         targetDiscount: 30 },
+  { key: 'speaker',    queries: ['bluetooth speaker portable', 'boat stone speaker', 'mini speaker waterproof'],              category: 'Electronics', subcategory: 'Speakers',        targetDiscount: 25 },
+  { key: 'powerbank',  queries: ['power bank 10000mah', 'mi power bank 20000mah', 'fast charging power bank'],               category: 'Electronics', subcategory: 'Power Banks',     targetDiscount: 20 },
+  { key: 'charger',    queries: ['fast charger type c', 'usb c cable braided', '65w gan charger'],                            category: 'Electronics', subcategory: 'Chargers',        targetDiscount: 20 },
+  { key: 'laptop_bag', queries: ['laptop bag 15.6 inch', 'laptop backpack waterproof', 'office laptop bag men'],              category: 'Bags',        subcategory: 'Laptop Bags',     targetDiscount: 25 },
+  { key: 'backpack',   queries: ['college backpack men', 'school bag 30 litre', 'travel backpack casual'],                    category: 'Bags',        subcategory: 'Backpacks',       targetDiscount: 25 },
+  { key: 'tshirt',     queries: ['men polo t-shirt pack', 'men round neck tshirt combo', 'men half sleeve t-shirt'],          category: 'Fashion',     subcategory: 'T-Shirts',        targetDiscount: 40 },
+  { key: 'jeans',      queries: ['men slim fit jeans', 'men casual jeans stretchable', 'men regular fit jeans'],              category: 'Fashion',     subcategory: 'Jeans',           targetDiscount: 40 },
+  { key: 'shoes',      queries: ['men casual running shoes', 'men sport shoes lightweight', 'men sneakers'],                  category: 'Fashion',     subcategory: 'Casual Shoes',    targetDiscount: 35 },
+  { key: 'slippers',   queries: ['men slippers flip flops', 'men bathroom slippers', 'men slides chappal'],                   category: 'Fashion',     subcategory: 'Slippers',        targetDiscount: 30 },
+  { key: 'bottle',     queries: ['steel water bottle flask', 'insulated water bottle 1 litre', 'sipper bottle leakproof'],    category: 'Kitchen',     subcategory: 'Bottles',         targetDiscount: 20 },
+  { key: 'umbrella',   queries: ['travel umbrella compact windproof', '3 fold umbrella', 'automatic umbrella'],               category: 'Lifestyle',   subcategory: 'Umbrellas',       targetDiscount: 20 },
+  { key: 'towel',      queries: ['bath towel cotton', 'microfibre towel gym', 'face towel soft'],                             category: 'Home',        subcategory: 'Towels',          targetDiscount: 30 },
+  { key: 'stationery', queries: ['pen set notebook diary', 'parker pen set', 'highlighter marker set'],                       category: 'Stationery',  subcategory: 'Pen & Notebooks', targetDiscount: 20 },
+  { key: 'lock',       queries: ['combination padlock room', 'numeric lock almirah', 'travel lock bag'],                      category: 'Home',        subcategory: 'Locks',           targetDiscount: 20 },
+  { key: 'lamp',       queries: ['study desk lamp led', 'table lamp rechargeable', 'eye care led study light'],               category: 'Furniture',   subcategory: 'Lamps',           targetDiscount: 25 },
+  { key: 'watch',      queries: ['digital watch men budget', 'analog watch men under 500', 'fastrack watch men'],             category: 'Watches',     subcategory: 'Digital Watches', targetDiscount: 35 },
+  { key: 'skincare',   queries: ['men face wash moisturizer', 'men grooming kit', 'men sunscreen spf 50'],                    category: 'Beauty',      subcategory: 'Skincare',        targetDiscount: 30 },
+  { key: 'fitness',    queries: ['resistance band gym set', 'yoga mat non-slip', 'skipping rope'],                            category: 'Sports',      subcategory: 'Fitness Bands',   targetDiscount: 25 },
+  { key: 'curtain',    queries: ['door curtain blackout', 'window curtain eyelet', 'room divider curtain'],                   category: 'Home',        subcategory: 'Curtains',        targetDiscount: 30 },
+  { key: 'mirror',     queries: ['wall mirror room', 'table mirror makeup', 'full length mirror'],                            category: 'Home',        subcategory: 'Mirrors',         targetDiscount: 25 },
+  { key: 'mosquito',   queries: ['mosquito racket electric', 'mosquito net single bed', 'mosquito killer lamp'],              category: 'Home',        subcategory: 'Mosquito Control',targetDiscount: 20 },
+  { key: 'wallet',     queries: ['men leather wallet slim', 'men bifold wallet', 'rfid wallet men'],                          category: 'Accessories', subcategory: 'Wallets',         targetDiscount: 35 },
 ];
 
-const PRODUCTS_PER_CATEGORY = 5;
+// 500 products = 25 categories × 3 queries × ~7 products each
+// Duplicates auto-skipped by externalId unique constraint
+const PRODUCTS_PER_QUERY = 8;
 const DELAY_MS = 2000;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -174,7 +183,8 @@ async function fetchProductDetails(productUrl) {
 // ─── MAIN ─────────────────────────────────────────────────────────────
 async function main() {
   console.log('🌱 DealFlow AI — Cuelink Watchlist Filler (Direct DB Mode)');
-  console.log(`📋 Categories: ${CATEGORIES.length} | Products per category: ${PRODUCTS_PER_CATEGORY}`);
+  console.log(`📋 Categories: ${CATEGORIES.length} | Queries/category: 3 | Products/query: ${PRODUCTS_PER_QUERY}`);
+  console.log(`🎯 Target: ~${CATEGORIES.length * 3 * PRODUCTS_PER_QUERY} unique products (duplicates auto-skipped)`);
   console.log('━'.repeat(60));
 
   let grandTotal = 0;
@@ -183,26 +193,29 @@ async function main() {
 
   for (let i = 0; i < CATEGORIES.length; i++) {
     const cat = CATEGORIES[i];
-    console.log(`\n[${i + 1}/${CATEGORIES.length}] 📂 ${cat.key} → "${cat.query}"`);
+    console.log(`\n[${i + 1}/${CATEGORIES.length}] 📂 ${cat.key} (${cat.queries.length} queries)`);
 
-    // Search Flipkart
-    let productLinks = [];
-    try {
-      productLinks = await searchFlipkart(cat.query);
-      await sleep(DELAY_MS);
-    } catch (err) {
-      console.log(`  ❌ Search failed: ${err.message}`);
-      grandFailed++;
-      continue;
-    }
+    // Run each search query for this category
+    for (const query of cat.queries) {
+      console.log(`  🔍 Searching: "${query}"`);
 
-    if (productLinks.length === 0) {
-      console.log(`  ⚠️ No results found (Flipkart may have blocked)`);
-      continue;
-    }
-    console.log(`  🔍 Found ${productLinks.length} products — scraping top ${Math.min(PRODUCTS_PER_CATEGORY, productLinks.length)}`);
+      let productLinks = [];
+      try {
+        productLinks = await searchFlipkart(query);
+        await sleep(DELAY_MS);
+      } catch (err) {
+        console.log(`    ❌ Search failed: ${err.message}`);
+        grandFailed++;
+        continue;
+      }
 
-    for (const { url, pid } of productLinks.slice(0, PRODUCTS_PER_CATEGORY)) {
+      if (productLinks.length === 0) {
+        console.log(`    ⚠️ No results (Flipkart blocked this query)`);
+        continue;
+      }
+      console.log(`    Found ${productLinks.length} → using top ${Math.min(PRODUCTS_PER_QUERY, productLinks.length)}`);
+
+      for (const { url, pid } of productLinks.slice(0, PRODUCTS_PER_QUERY)) {
       const externalId = pid || extractFlipkartId(url);
       if (!externalId) { grandFailed++; continue; }
 
@@ -226,45 +239,49 @@ async function main() {
       }
 
       if (!details || !details.title || !details.currentPrice) {
-        console.log(`  ⚠️  Incomplete data for ${externalId} — skip`);
-        grandFailed++;
-        continue;
-      }
+            console.log(`    ⚠️  Incomplete data — skip`);
+            grandFailed++;
+            continue;
+          }
 
-      const targetPrice = Math.round(details.currentPrice * (1 - cat.targetDiscount / 100));
+          const targetPrice = Math.round(details.currentPrice * (1 - cat.targetDiscount / 100));
 
-      try {
-        await prisma.cuelinkWishlist.create({
-          data: {
-            externalId,
-            platform: 'flipkart',
-            title: details.title.substring(0, 500),
-            productUrl: url,
-            brand: null,
-            category: cat.category,
-            subcategory: cat.subcategory,
-            price: details.currentPrice,
-            mrp: details.originalPrice || details.currentPrice,
-            discount: details.discount || 0,
-            image: details.imageUrl || '',
-            targetPrice,
-            targetDiscount: cat.targetDiscount,
-            active: true,
-          },
-        });
-        grandTotal++;
-        console.log(`  ✅ Added: "${details.title.substring(0, 50)}" ₹${details.currentPrice}`);
-      } catch (dbErr) {
-        if (dbErr.code === 'P2002') { grandSkipped++; }
-        else { console.log(`  ❌ DB: ${dbErr.message}`); grandFailed++; }
-      }
-    }
+          try {
+            await prisma.cuelinkWishlist.create({
+              data: {
+                externalId,
+                platform: 'flipkart',
+                title: details.title.substring(0, 500),
+                productUrl: url,
+                brand: null,
+                category: cat.category,
+                subcategory: cat.subcategory,
+                price: details.currentPrice,
+                mrp: details.originalPrice || details.currentPrice,
+                discount: details.discount || 0,
+                image: details.imageUrl || '',
+                targetPrice,
+                targetDiscount: cat.targetDiscount,
+                active: true,
+              },
+            });
+            grandTotal++;
+            console.log(`    ✅ Added: "${details.title.substring(0, 50)}" ₹${details.currentPrice}`);
+          } catch (dbErr) {
+            if (dbErr.code === 'P2002') { grandSkipped++; }
+            else { console.log(`    ❌ DB: ${dbErr.message}`); grandFailed++; }
+          }
+        } // end products loop
+
+        console.log(`    💤 3s pause...`);
+        await sleep(3000);
+      } // end queries loop
 
     if (i < CATEGORIES.length - 1) {
-      console.log(`  💤 5s pause before next category...`);
+      console.log(`  ⏸️  5s pause before next category...`);
       await sleep(5000);
     }
-  }
+  } // end categories loop
 
   await prisma.$disconnect();
   console.log('\n' + '━'.repeat(60));
