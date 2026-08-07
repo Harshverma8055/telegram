@@ -121,6 +121,20 @@ function isSilentHoursIST(): boolean {
   return false;
 }
 
+function getTodayMidnightIST(): Date {
+  const now = new Date();
+  const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const istDate = new Date(istString);
+  istDate.setHours(0, 0, 0, 0);
+  // IST = UTC+5:30, so midnight IST = UTC-5:30
+  return new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+}
+
+// Max deals per day on the main channel.
+// 16 active hours / 45-min cooldown ≈ 21 max, but we cap at 20 for quality.
+// Keeps the channel clean and non-spammy for subscribers.
+const MAX_MAIN_POSTS_PER_DAY = 20;
+
 // Vercel Cron routes must be a GET request
 export async function GET(request: Request) {
   // Support both Authorization header and ?key= query parameter
@@ -139,6 +153,26 @@ export async function GET(request: Request) {
   console.log('📡 Starting Vercel Cron: Deal Scraper...');
 
   const isSilent = isSilentHoursIST();
+
+  // ── DAILY CAP: Max 20 posts per day on main channel ───────────────
+  // With 45-min cooldown this is already naturally ~21 max,
+  // but an explicit cap prevents any edge-case burst.
+  const todayMidnight = getTodayMidnightIST();
+  const mainTodayCount = await prisma.deal.count({
+    where: {
+      isPublished: true,
+      publishedAt: { gte: todayMidnight },
+    },
+  });
+  console.log(`📊 Main channel today: ${mainTodayCount}/${MAX_MAIN_POSTS_PER_DAY} posts`);
+  if (mainTodayCount >= MAX_MAIN_POSTS_PER_DAY) {
+    return NextResponse.json({
+      success: true,
+      message: `Daily cap reached (${mainTodayCount}/${MAX_MAIN_POSTS_PER_DAY}). Main channel rest for today.`,
+      mainTodayCount,
+    });
+  }
+  // ──────────────────────────────────────────────────────────────────
 
   // 0. DRAIN QUEUE (Publish saved deals from silent hours if we are in active hours and spaced out)
   if (!isSilent) {
