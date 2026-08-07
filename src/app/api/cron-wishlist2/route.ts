@@ -27,6 +27,20 @@ const MAIN_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
 const BATCH_SIZE = 5;           // Reduced from 10 to save Vercel CPU
 const MAX_MS = 23000;           // Must finish before cron-job.org 30s timeout
 
+// ── SHARED LIMITS (must match cron-hostel) ──────────────────────────
+const HOSTEL_COOLDOWN_MIN = 45;   // Min gap between any two hostel posts
+const MAX_HOSTEL_PER_DAY = 15;    // Hard daily cap for hostel channel
+const MAX_HOSTEL_PER_RUN = 1;     // Post at most 1 to hostel per cron run
+// ─────────────────────────────────────────────────────────────────────
+
+function getTodayMidnightIST(): Date {
+  const now = new Date();
+  const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const istDate = new Date(istString);
+  istDate.setHours(0, 0, 0, 0);
+  return new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+}
+
 function isSilentHoursIST(): boolean {
   const now = new Date();
   const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
@@ -179,6 +193,39 @@ export async function GET(request: Request) {
         },
       });
 
+      // ── GATE: Check shared hostel cooldown + daily cap BEFORE posting ──
+      let canPostToHostel = !isSilent && bot !== null;
+      let hostelPostsToday = 0;
+      let hostelPostedThisRun = 0; // Only 1 per run
+
+      if (canPostToHostel) {
+        // Daily cap check
+        const todayMidnight = getTodayMidnightIST();
+        hostelPostsToday = await prisma.deal.count({
+          where: { isPublishedHostel: true, publishedHostelAt: { gte: todayMidnight } },
+        });
+        if (hostelPostsToday >= MAX_HOSTEL_PER_DAY) {
+          canPostToHostel = false;
+          logs.push(`🚫 Hostel daily cap reached (${hostelPostsToday}/${MAX_HOSTEL_PER_DAY}) — skipping hostel`);
+        }
+
+        // Cooldown check
+        if (canPostToHostel) {
+          const lastPost = await prisma.deal.findFirst({
+            where: { isPublishedHostel: true, publishedHostelAt: { not: null } },
+            orderBy: { publishedHostelAt: 'desc' },
+          });
+          const minsSince = lastPost?.publishedHostelAt
+            ? (Date.now() - new Date(lastPost.publishedHostelAt).getTime()) / 60000
+            : 999;
+          if (minsSince < HOSTEL_COOLDOWN_MIN) {
+            canPostToHostel = false;
+            logs.push(`⏳ Hostel cooldown: ${Math.round(HOSTEL_COOLDOWN_MIN - minsSince)} min remaining — skipping hostel`);
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────
+
       // Publish to both channels
       if (!isSilent && bot) {
         try {
@@ -194,42 +241,38 @@ export async function GET(request: Request) {
           msg += `👇 *Grab it now* 👇`;
 
           const imageUrl = details.imageUrl || prod.image;
+          const keyboard = { inline_keyboard: [[{ text: '🛒 Buy Now', url: affiliateUrl }]] };
 
-          // Post to main channel
+          // Post to main channel (no restrictions — main has its own daily cap in /api/cron)
           if (imageUrl && imageUrl.startsWith('http')) {
-            await bot.sendPhoto(MAIN_CHANNEL, imageUrl, {
-              caption: msg,
-              parse_mode: 'Markdown',
-              reply_markup: { inline_keyboard: [[{ text: '🛒 Buy Now', url: affiliateUrl }]] },
-            });
+            await bot.sendPhoto(MAIN_CHANNEL, imageUrl, { caption: msg, parse_mode: 'Markdown', reply_markup: keyboard });
           } else {
-            await bot.sendMessage(MAIN_CHANNEL, msg, {
-              parse_mode: 'Markdown',
-              reply_markup: { inline_keyboard: [[{ text: '🛒 Buy Now', url: affiliateUrl }]] },
-            });
+            await bot.sendMessage(MAIN_CHANNEL, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
           }
 
-          // Post to hostel channel
-          if (imageUrl && imageUrl.startsWith('http')) {
-            await bot.sendPhoto(HOSTEL_CHANNEL, imageUrl, {
-              caption: msg,
-              parse_mode: 'Markdown',
-              reply_markup: { inline_keyboard: [[{ text: '🛒 Buy Now', url: affiliateUrl }]] },
+          // Post to hostel ONLY if cooldown + cap allows AND we haven't posted this run
+          if (canPostToHostel && hostelPostedThisRun < MAX_HOSTEL_PER_RUN) {
+            if (imageUrl && imageUrl.startsWith('http')) {
+              await bot.sendPhoto(HOSTEL_CHANNEL, imageUrl, { caption: msg, parse_mode: 'Markdown', reply_markup: keyboard });
+            } else {
+              await bot.sendMessage(HOSTEL_CHANNEL, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+            }
+            hostelPostedThisRun++;
+
+            await prisma.deal.update({
+              where: { id: deal.id },
+              data: { isPublished: true, publishedAt: new Date(), isPublishedHostel: true, publishedHostelAt: new Date() },
             });
+            logs.push(`✅ Published to ${MAIN_CHANNEL} + ${HOSTEL_CHANNEL}`);
           } else {
-            await bot.sendMessage(HOSTEL_CHANNEL, msg, {
-              parse_mode: 'Markdown',
-              reply_markup: { inline_keyboard: [[{ text: '🛒 Buy Now', url: affiliateUrl }]] },
+            await prisma.deal.update({
+              where: { id: deal.id },
+              data: { isPublished: true, publishedAt: new Date() },
             });
+            logs.push(`✅ Published to ${MAIN_CHANNEL} only (hostel: cooldown/cap active)`);
           }
 
-          await prisma.deal.update({
-            where: { id: deal.id },
-            data: { isPublished: true, publishedAt: new Date(), isPublishedHostel: true, publishedHostelAt: new Date() },
-          });
-
-          logs.push(`✅ Published to ${MAIN_CHANNEL} + ${HOSTEL_CHANNEL}`);
-          console.log(`✅ [cron-wishlist2] Published: ${prod.externalId} to both channels`);
+          console.log(`✅ [cron-wishlist2] Published: ${prod.externalId}`);
         } catch (err: any) {
           logs.push(`❌ Failed to publish: ${err.message}`);
           console.error(`[cron-wishlist2] Publish error:`, err.message);

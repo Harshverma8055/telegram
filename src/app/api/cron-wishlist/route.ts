@@ -10,10 +10,23 @@ import { getAffiliateUrl } from '@/lib/affiliate';
 // Main channel has its own independent cron at /api/cron
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 
-// How many wishlist items to check per cron run (reduced to fit 30s cron-job.org timeout)
+// How many wishlist items to check per cron run
 const BATCH_SIZE = 6;
-// Max execution time in ms (must finish before cron-job.org's 30s timeout)
+// Max execution time in ms
 const MAX_MS = 23000;
+
+// ── SHARED LIMITS (must match cron-hostel) ──────────────────────────
+const HOSTEL_COOLDOWN_MIN = 45;  // Min gap between any two hostel posts
+const MAX_HOSTEL_PER_DAY  = 15;  // Hard daily cap for hostel channel
+const MAX_HOSTEL_PER_RUN  = 1;   // Post at most 1 to hostel per cron run
+// ────────────────────────────────────────────────────────────────────
+function getTodayMidnightIST(): Date {
+  const now = new Date();
+  const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const istDate = new Date(istString);
+  istDate.setHours(0, 0, 0, 0);
+  return new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+}
 
 function isSilentHoursIST(): boolean {
   const now = new Date();
@@ -200,25 +213,48 @@ export async function GET(request: Request) {
         );
 
         // Publish to hostel channel ONLY (wishlist = student products)
-        // NOTE: Do NOT add main channel here. Main channel has /api/cron.
         if (!isSilent) {
-          try {
-            await publishToTelegram(deal.id, HOSTEL_CHANNEL);
+          // ── GATE: Check shared hostel cooldown + daily cap BEFORE posting ──
+          let canPostToHostel = true;
 
-            // ── SHARED COOLDOWN MARKER ─────────────────────────────────
-            // Set publishedHostelAt so cron-hostel + showcase both see
-            // this post and wait 45 min before posting again.
-            await prisma.deal.update({
-              where: { id: deal.id },
-              data: {
-                isPublishedHostel: true,
-                publishedHostelAt: new Date(),
-              },
+          const todayMidnight = getTodayMidnightIST();
+          const hostelToday = await prisma.deal.count({
+            where: { isPublishedHostel: true, publishedHostelAt: { gte: todayMidnight } },
+          });
+          if (hostelToday >= MAX_HOSTEL_PER_DAY) {
+            canPostToHostel = false;
+            logs.push(`🚫 Hostel daily cap reached (${hostelToday}/${MAX_HOSTEL_PER_DAY}) — skipping`);
+          }
+
+          if (canPostToHostel) {
+            const lastPost = await prisma.deal.findFirst({
+              where: { isPublishedHostel: true, publishedHostelAt: { not: null } },
+              orderBy: { publishedHostelAt: 'desc' },
             });
-            // ──────────────────────────────────────────────────────
+            const minsSince = lastPost?.publishedHostelAt
+              ? (Date.now() - new Date(lastPost.publishedHostelAt).getTime()) / 60000
+              : 999;
+            if (minsSince < HOSTEL_COOLDOWN_MIN) {
+              canPostToHostel = false;
+              logs.push(`⏳ Hostel cooldown: ${Math.round(HOSTEL_COOLDOWN_MIN - minsSince)} min left — skipping`);
+            }
+          }
+          // ────────────────────────────────────────────────────────────────────
 
-            logs.push(`✅ Published to ${HOSTEL_CHANNEL}`);
-            console.log(`✅ [cron-wishlist] Published to ${HOSTEL_CHANNEL}: ${prod.asin}`);
+          try {
+            if (canPostToHostel) {
+              await publishToTelegram(deal.id, HOSTEL_CHANNEL);
+
+              // Shared cooldown marker — update publishedHostelAt so all crons see it
+              await prisma.deal.update({
+                where: { id: deal.id },
+                data: { isPublishedHostel: true, publishedHostelAt: new Date() },
+              });
+              logs.push(`✅ Published to ${HOSTEL_CHANNEL}`);
+              console.log(`✅ [cron-wishlist] Published to hostel: ${prod.asin}`);
+            } else {
+              logs.push(`⏩ Hostel skipped (cap/cooldown) — deal saved in DB only`);
+            }
           } catch (err: any) {
             logs.push(`❌ Failed to publish to ${HOSTEL_CHANNEL}: ${err.message}`);
             console.error(`[cron-wishlist] Publish error (hostel):`, err.message);
