@@ -15,7 +15,7 @@
 
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow up to 60 seconds execution on Vercel
+export const maxDuration = 30; // Reduced from 60s to stay under Vercel CPU limits
 import prisma from '@/lib/prisma';
 import { fetchProductDetails } from '@/lib/cuelink-scraper';
 import { bot, sanitizeTitle, escapeMarkdown } from '@/lib/telegram';
@@ -24,8 +24,8 @@ import { getAffiliateUrlAsync } from '@/lib/affiliate';
 const HOSTEL_CHANNEL = process.env.HOSTEL_CHANNEL || '@hosteldeals';
 const MAIN_CHANNEL = process.env.TELEGRAM_CHANNEL || '@fantasticofffer';
 
-const BATCH_SIZE = 10;
-const MAX_MS = 50000; // 50s safety guard for Vercel 60s maxDuration
+const BATCH_SIZE = 5;           // Reduced from 10 to save Vercel CPU
+const MAX_MS = 23000;           // Must finish before cron-job.org 30s timeout
 
 function isSilentHoursIST(): boolean {
   const now = new Date();
