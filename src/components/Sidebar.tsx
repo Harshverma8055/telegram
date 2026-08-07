@@ -1,6 +1,5 @@
 'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Tag,
@@ -32,39 +31,54 @@ interface NavItem {
   children?: { id: string; label: string }[];
 }
 
-const navGroups: { title: string; items: NavItem[] }[] = [
-  {
-    title: 'OVERVIEW',
-    items: [
-      { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
-    ],
-  },
-  {
-    title: 'DEAL AUTOMATION',
-    items: [
-      { id: 'deals', label: 'All Deals', icon: <Tag size={18} /> },
-      { id: 'amazon-wishlist', label: 'Amazon Wishlist', icon: <ShoppingBag size={18} />, badge: '780' },
-      { id: 'cuelink-watchlist', label: 'Flipkart Watchlist', icon: <Star size={18} />, badge: '233' },
-      { id: 'manual-upload', label: 'Manual Upload', icon: <Upload size={18} /> },
-    ],
-  },
-  {
-    title: 'CHANNELS',
-    items: [
-      { id: 'telegram', label: 'Telegram', icon: <Send size={18} />, badge: '2 channels' },
-      { id: 'recurring', label: 'Smart Reposter', icon: <Clock size={18} /> },
-    ],
-  },
-  {
-    title: 'TOOLS',
-    items: [
-      { id: 'scrapers', label: 'Scraper Status', icon: <Globe size={18} />, badge: '4 active' },
-    ],
-  },
-];
-
 export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [counts, setCounts] = useState({ amazon: '...', flipkart: '...' });
+
+  useEffect(() => {
+    // Fetch live Amazon wishlist count
+    fetch('/api/wishlist/products?limit=1')
+      .then(r => r.json())
+      .then(d => setCounts(c => ({ ...c, amazon: String(d.total ?? d.products?.length ?? '?') })))
+      .catch(() => setCounts(c => ({ ...c, amazon: '?' })));
+
+    // Fetch live Flipkart/Cuelink watchlist count
+    fetch('/api/cuelink-watchlist?limit=1')
+      .then(r => r.json())
+      .then(d => setCounts(c => ({ ...c, flipkart: String(d.total ?? '?') })))
+      .catch(() => setCounts(c => ({ ...c, flipkart: '?' })));
+  }, []);
+
+  const navGroups: { title: string; items: NavItem[] }[] = [
+    {
+      title: 'OVERVIEW',
+      items: [
+        { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+      ],
+    },
+    {
+      title: 'DEAL AUTOMATION',
+      items: [
+        { id: 'deals', label: 'All Deals', icon: <Tag size={18} /> },
+        { id: 'amazon-wishlist', label: 'Amazon Wishlist', icon: <ShoppingBag size={18} />, badge: counts.amazon },
+        { id: 'cuelink-watchlist', label: 'Flipkart Watchlist', icon: <Star size={18} />, badge: counts.flipkart },
+        { id: 'manual-upload', label: 'Manual Upload', icon: <Upload size={18} /> },
+      ],
+    },
+    {
+      title: 'CHANNELS',
+      items: [
+        { id: 'telegram', label: 'Telegram', icon: <Send size={18} />, badge: '2 channels' },
+        { id: 'recurring', label: 'Smart Reposter', icon: <Clock size={18} /> },
+      ],
+    },
+    {
+      title: 'TOOLS',
+      items: [
+        { id: 'scrapers', label: 'Scraper Status', icon: <Globe size={18} />, badge: '4 active' },
+      ],
+    },
+  ];
 
   return (
     <>

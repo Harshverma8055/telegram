@@ -4,17 +4,31 @@ import React from 'react';
 import { Send, Users, Activity, Settings, Plus } from 'lucide-react';
 
 export default function TelegramView() {
-  // Currently, we only use the primary channel specified in .env
   const liveChannels = [
     {
       id: '1',
-      name: 'My Deal Channel',
+      name: 'Fantastic Offers',
       username: '@fantasticofffer',
       isActive: true,
-      members: 0, // Awaiting Telegram API integration
+      members: 0,
       postsToday: 'LIVE',
-      categories: ['All Deals'],
-    }
+      categories: ['All Deals', 'Flash Sales', 'Price Drops'],
+      description: 'Main channel — all deals, max 20/day',
+      color: 'linear-gradient(135deg, #0088cc 0%, #00aaff 100%)',
+      shadowColor: 'rgba(0, 136, 204, 0.3)',
+    },
+    {
+      id: '2',
+      name: 'Hostel Deals',
+      username: '@hosteldeals',
+      isActive: true,
+      members: 0,
+      postsToday: 'LIVE',
+      categories: ['Student Essentials', 'Amazon Wishlist', 'Flipkart Drops'],
+      description: 'Hostel channel — curated picks, max 15/day, 45min gap',
+      color: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+      shadowColor: 'rgba(124, 58, 237, 0.3)',
+    },
   ];
 
   return (
@@ -31,20 +45,21 @@ export default function TelegramView() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
         {liveChannels.map((channel) => (
-          <div key={channel.id} className="glass-card" style={{ padding: '20px' }}>
+          <div key={channel.id} className="glass-card" style={{ padding: '20px', borderTop: `3px solid ${channel.color.includes('#0088') ? '#0088cc' : '#7c3aed'}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ 
                   width: '44px', height: '44px', borderRadius: '50%', 
-                  background: 'linear-gradient(135deg, #0088cc 0%, #00aaff 100%)',
+                  background: channel.color,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 4px 10px rgba(0, 136, 204, 0.3)'
+                  boxShadow: `0 4px 10px ${channel.shadowColor}`
                 }}>
                   <Send size={20} color="white" style={{ marginLeft: '-2px' }} />
                 </div>
                 <div>
                   <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{channel.name}</h3>
                   <div style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>{channel.username}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 2 }}>{channel.description}</div>
                 </div>
               </div>
               <label className="toggle-switch" title={channel.isActive ? "Active" : "Inactive"}>

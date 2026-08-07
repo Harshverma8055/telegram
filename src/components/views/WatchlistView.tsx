@@ -28,11 +28,31 @@ export default function WatchlistView() {
   const [adding, setAdding] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   // Target price editing state
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const [targetInput, setTargetInput] = useState<string>('');
   const [updatingTarget, setUpdatingTarget] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === products.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(products.map(p => p.id)));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
 
   const handlePrepopulate = async () => {
     try {
@@ -102,19 +122,27 @@ export default function WatchlistView() {
     }
   };
 
+  // DELETE SINGLE — removes from local state (no reload, no scroll reset)
   const handleDeleteProduct = async (id: string) => {
-    if (!confirm('Are you sure you want to stop tracking this product?')) return;
+    setProducts(prev => prev.filter(p => p.id !== id));
+    setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    await fetch(`/api/watchlist?id=${id}`, { method: 'DELETE' }).catch(console.error);
+  };
 
-    try {
-      const res = await fetch(`/api/watchlist?id=${id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        fetchProducts();
-      }
-    } catch (e) {
-      console.error(e);
-    }
+  // BULK DELETE — removes all selected from local state instantly
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected products?`)) return;
+    setDeleting(true);
+    const ids = Array.from(selectedIds);
+    // Remove from UI immediately
+    setProducts(prev => prev.filter(p => !selectedIds.has(p.id)));
+    setSelectedIds(new Set());
+    // Delete from DB in background
+    await Promise.all(ids.map(id => fetch(`/api/watchlist?id=${id}`, { method: 'DELETE' }).catch(console.error)));
+    setDeleting(false);
+    setMessage({ type: 'success', text: `${ids.length} products removed.` });
+    setTimeout(() => setMessage(null), 3000);
   };
 
   const handleUpdateTarget = async (id: string) => {
@@ -321,12 +349,40 @@ export default function WatchlistView() {
       {/* Watchlist Grid */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Currently Tracking ({products.length} Products)
-          </h3>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Bell size={14} /> Checking hourly
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Currently Tracking ({products.length} Products)
+            </h3>
+            {selectedIds.size > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{selectedIds.size} selected</span>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={deleting}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#f87171', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                >
+                  <Trash2 size={14} /> Delete {selectedIds.size}
+                </button>
+                <button onClick={clearSelection} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}>✕ Clear</button>
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {products.length > 0 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === products.length && products.length > 0}
+                  onChange={toggleSelectAll}
+                  style={{ width: 15, height: 15, cursor: 'pointer' }}
+                />
+                Select All
+              </label>
+            )}
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Bell size={14} /> Checking hourly
+            </span>
+          </div>
         </div>
 
         {loading ? (
@@ -353,11 +409,20 @@ export default function WatchlistView() {
                   style={{ 
                     padding: '16px 20px', 
                     display: 'grid', 
-                    gridTemplateColumns: '80px 1.5fr 1fr 1.2fr 1.2fr 60px', 
+                    gridTemplateColumns: '28px 80px 1.5fr 1fr 1.2fr 1.2fr 60px', 
                     alignItems: 'center', 
-                    gap: '20px' 
+                    gap: '16px',
+                    background: selectedIds.has(product.id) ? 'rgba(99,102,241,0.06)' : undefined,
+                    border: selectedIds.has(product.id) ? '1px solid rgba(99,102,241,0.25)' : undefined,
                   }}
                 >
+                  {/* Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(product.id)}
+                    onChange={() => toggleSelect(product.id)}
+                    style={{ width: 15, height: 15, cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
+                  />
                   {/* Image */}
                   <div style={{ 
                     width: '80px', 
