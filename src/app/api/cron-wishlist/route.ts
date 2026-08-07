@@ -204,6 +204,19 @@ export async function GET(request: Request) {
         if (!isSilent) {
           try {
             await publishToTelegram(deal.id, HOSTEL_CHANNEL);
+
+            // ── SHARED COOLDOWN MARKER ─────────────────────────────────
+            // Set publishedHostelAt so cron-hostel + showcase both see
+            // this post and wait 45 min before posting again.
+            await prisma.deal.update({
+              where: { id: deal.id },
+              data: {
+                isPublishedHostel: true,
+                publishedHostelAt: new Date(),
+              },
+            });
+            // ──────────────────────────────────────────────────────
+
             logs.push(`✅ Published to ${HOSTEL_CHANNEL}`);
             console.log(`✅ [cron-wishlist] Published to ${HOSTEL_CHANNEL}: ${prod.asin}`);
           } catch (err: any) {

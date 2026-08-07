@@ -237,6 +237,22 @@ export async function GET(request: Request) {
           posted++;
           logs.push(`✅ Showcased: "${cleanTitle.substring(0, 50)}" (ASIN: ${prod.asin})`);
           console.log(`✅ [cron-showcase] Posted: "${cleanTitle.substring(0, 40)}"`);
+
+          // ── SHARED COOLDOWN MARKER ──────────────────────────────────
+          // Update publishedHostelAt on the most recent deal so that
+          // cron-hostel sees "hostel was just posted" and waits 45 min.
+          // Without this, cron-hostel fires again within minutes.
+          const recentDeal = await prisma.deal.findFirst({
+            where: { isPublishedHostel: true },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (recentDeal) {
+            await prisma.deal.update({
+              where: { id: recentDeal.id },
+              data: { publishedHostelAt: new Date() },
+            });
+          }
+          // ───────────────────────────────────────────────────────────
         } else {
           logs.push(`[SIMULATION] Would post: "${cleanTitle.substring(0, 50)}"`);
         }
