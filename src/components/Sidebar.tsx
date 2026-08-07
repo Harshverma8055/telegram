@@ -36,10 +36,10 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   const [counts, setCounts] = useState({ amazon: '...', flipkart: '...' });
 
   useEffect(() => {
-    // Fetch live Amazon wishlist count
+    // Fetch live Amazon wishlist count — API returns pagination.total
     fetch('/api/wishlist/products?limit=1')
       .then(r => r.json())
-      .then(d => setCounts(c => ({ ...c, amazon: String(d.total ?? d.products?.length ?? '?') })))
+      .then(d => setCounts(c => ({ ...c, amazon: String(d.pagination?.total ?? d.total ?? '?') })))
       .catch(() => setCounts(c => ({ ...c, amazon: '?' })));
 
     // Fetch live Flipkart/Cuelink watchlist count
