@@ -244,7 +244,19 @@ async function main() {
             continue;
           }
 
-          const targetPrice = Math.round(details.currentPrice * (1 - cat.targetDiscount / 100));
+          // ── CORRECT MRP + TARGET PRICE LOGIC ──────────────────────────────────
+          // Only use originalPrice as MRP if it is meaningfully HIGHER than current price.
+          // Flipkart often returns the same price for both current and original.
+          const hasRealMrp = details.originalPrice && details.originalPrice > details.currentPrice * 1.10;
+          const mrpToStore = hasRealMrp ? details.originalPrice : details.currentPrice;
+
+          // NEVER base targetPrice on the already-discounted currentPrice!
+          // If we have a real MRP → target = MRP * (1 - targetDiscount%)
+          // If no real MRP → null (cron triggers on any 3%+ price drop from stored price)
+          const targetPrice = hasRealMrp
+            ? Math.round(details.originalPrice * (1 - cat.targetDiscount / 100))
+            : null;
+          // ──────────────────────────────────────────────────────────────────────
 
           try {
             await prisma.cuelinkWishlist.create({
@@ -257,16 +269,17 @@ async function main() {
                 category: cat.category,
                 subcategory: cat.subcategory,
                 price: details.currentPrice,
-                mrp: details.originalPrice || details.currentPrice,
+                mrp: mrpToStore,
                 discount: details.discount || 0,
                 image: details.imageUrl || '',
                 targetPrice,
-                targetDiscount: cat.targetDiscount,
+                targetDiscount: null, // deprecated — cron uses smart price-drop trigger
                 active: true,
               },
             });
             grandTotal++;
-            console.log(`    ✅ Added: "${details.title.substring(0, 50)}" ₹${details.currentPrice}`);
+            const mrpNote = hasRealMrp ? ` (real MRP ₹${details.originalPrice})` : ' (no MRP — price-drop trigger)';
+            console.log(`    ✅ Added: "${details.title.substring(0, 50)}" ₹${details.currentPrice}${mrpNote}`);
           } catch (dbErr) {
             if (dbErr.code === 'P2002') { grandSkipped++; }
             else { console.log(`    ❌ DB: ${dbErr.message}`); grandFailed++; }

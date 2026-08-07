@@ -110,26 +110,36 @@ export async function GET(request: Request) {
       }
 
       const latestPrice = details.currentPrice;
-      const originalPrice = details.originalPrice || prod.mrp || latestPrice;
+      // Use scraped MRP if available, else fall back to stored MRP, else stored price
+      const originalPrice = (details.originalPrice && details.originalPrice > latestPrice)
+        ? details.originalPrice
+        : (prod.mrp && prod.mrp > prod.price ? prod.mrp : latestPrice);
       const latestDiscount = originalPrice > latestPrice
         ? Math.round(((originalPrice - latestPrice) / originalPrice) * 100)
         : 0;
 
-      // Check if target is met
-      let hasHitTarget = false;
-      const hasCustomTargets = prod.targetPrice !== null || prod.targetDiscount !== null;
+      // ── SMART TRIGGER LOGIC ─────────────────────────────────────────────
+      // PRIMARY: Price drop from stored price (works even when MRP is unknown)
+      const storedPrice = prod.price || 0;
+      const priceDrop = storedPrice > 0
+        ? ((storedPrice - latestPrice) / storedPrice) * 100
+        : 0;
+      const hasPriceDrop = priceDrop >= 3; // 3%+ price drop = alert
 
-      if (hasCustomTargets) {
-        const hitPrice = prod.targetPrice ? latestPrice <= prod.targetPrice : false;
-        const hitDiscount = prod.targetDiscount ? latestDiscount >= prod.targetDiscount : false;
-        hasHitTarget = hitPrice || hitDiscount;
-        logs.push(`🔎 ${prod.externalId}: ₹${latestPrice} (${latestDiscount}% off) | Target: ₹${prod.targetPrice} OR ${prod.targetDiscount}% off`);
-      } else {
-        // Default: 5% price drop OR 50%+ discount
-        const defaultTargetPrice = Math.round(prod.price * 0.95);
-        hasHitTarget = latestPrice <= defaultTargetPrice || latestDiscount >= 50;
-        logs.push(`🔎 ${prod.externalId}: ₹${latestPrice} (${latestDiscount}% off) | Default target: ₹${defaultTargetPrice} or 50% off`);
-      }
+      // SECONDARY: Product is at a genuinely high discount from its REAL MRP
+      const hasHighDiscount = latestDiscount >= 50; // 50%+ off from actual MRP
+
+      // CUSTOM: If admin explicitly set a target price, respect it
+      const hitCustomPrice = prod.targetPrice != null && prod.targetPrice > 0
+        ? latestPrice <= prod.targetPrice
+        : false;
+
+      let hasHitTarget = hasPriceDrop || hasHighDiscount || hitCustomPrice;
+      // ───────────────────────────────────────────────────────────────
+
+      logs.push(`🔎 ${prod.externalId}: stored=₹${storedPrice} live=₹${latestPrice} drop=${priceDrop.toFixed(1)}% | discount=${latestDiscount}%${hitCustomPrice ? ' | custom-target-hit' : ''}`);
+      logs.push(`   → trigger: priceDrop=${hasPriceDrop} highDisc=${hasHighDiscount} customPrice=${hitCustomPrice}`);
+
 
       if (!hasHitTarget) continue;
 
