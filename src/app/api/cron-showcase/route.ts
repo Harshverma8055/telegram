@@ -145,6 +145,26 @@ export async function GET(request: Request) {
       });
     }
     // ──────────────────────────────────────────────────────────
+
+    // ── SHARED COOLDOWN: Same 45-min rule as cron-hostel ──────
+    // Both crons write to hostel channel. If cron-hostel just posted,
+    // showcase must wait too — otherwise 3 posts land in 1 minute.
+    const HOSTEL_COOLDOWN_MIN = 45;
+    const lastHostelPost = await prisma.deal.findFirst({
+      where: { isPublishedHostel: true, publishedHostelAt: { not: null } },
+      orderBy: { publishedHostelAt: 'desc' },
+    });
+    const minsSinceLastPost = lastHostelPost?.publishedHostelAt
+      ? (Date.now() - new Date(lastHostelPost.publishedHostelAt).getTime()) / (1000 * 60)
+      : 999;
+
+    if (minsSinceLastPost < HOSTEL_COOLDOWN_MIN) {
+      const waitMin = Math.ceil(HOSTEL_COOLDOWN_MIN - minsSinceLastPost);
+      logs.push(`⏳ Hostel cooldown active — ${waitMin} min remaining. Showcase skipped.`);
+      return NextResponse.json({ success: true, message: `Cooldown: wait ${waitMin} more minutes.`, logs });
+    }
+    // ──────────────────────────────────────────────────────────
+
     // Pick the wishlist products that haven't been showcased in the longest time.
     // We use last_updated ASC — the oldest-checked items are showcased first.
     // After showcasing, we update last_updated so they rotate to end of queue.
