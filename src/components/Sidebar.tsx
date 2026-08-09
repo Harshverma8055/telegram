@@ -16,6 +16,7 @@ import {
   Globe,
   Upload,
   ShoppingCart,
+  Link2,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -75,6 +76,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     {
       title: 'TOOLS',
       items: [
+        { id: 'link-converter', label: 'Affiliate Links 💸', icon: <Link2 size={18} /> },
         { id: 'scrapers', label: 'Scraper Status', icon: <Globe size={18} />, badge: '4 active' },
       ],
     },

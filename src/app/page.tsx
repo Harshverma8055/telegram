@@ -30,6 +30,7 @@ import RecurringView from '@/components/views/RecurringView';
 import WatchlistView from '@/components/views/WatchlistView';
 import WishlistView from '@/components/views/WishlistView';
 import CuelinkWatchlistView from '@/components/views/CuelinkWatchlistView';
+import LinkConverterView from '@/components/views/LinkConverterView';
 import {
   mockDashboardStats,
   mockRevenueTimeline,
@@ -337,6 +338,8 @@ export default function App() {
         return <TelegramView />;
       case 'recurring':
         return <RecurringView />;
+      case 'link-converter':
+        return <LinkConverterView />;
       default:
         return (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -357,6 +360,7 @@ export default function App() {
       case 'scrapers': return 'Scraper Status';
       case 'telegram': return 'Telegram Channels';
       case 'recurring': return 'Smart Reposter';
+      case 'link-converter': return '🔗 Affiliate Link Converter';
       default: return activeSection.charAt(0).toUpperCase() + activeSection.slice(1).replace('-', ' ');
     }
   };
@@ -371,6 +375,7 @@ export default function App() {
       case 'scrapers': return 'Live status of all 4 automated crons: Main, Hostel, Amazon Wishlist, Cuelink Wishlist.';
       case 'telegram': return 'Manage @fantasticofffer (main) and @hosteldeals channels.';
       case 'recurring': return 'Schedule recurring posts to channels.';
+      case 'link-converter': return 'Paste any Flipkart, Myntra or Ajio product link — get your Cuelinks affiliate link instantly.';
       default: return '';
     }
   };
