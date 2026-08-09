@@ -54,7 +54,7 @@ export async function getCuelinkAffiliateUrl(
 
     const data = response.data;
 
-    // V3 response fields
+    // V3 response fields (handle different shapes)
     if (data?.tracking_url) {
       console.log(`🔗 [Cuelinks V3] Generated: ${data.tracking_url}`);
       return data.tracking_url;
@@ -68,74 +68,8 @@ export async function getCuelinkAffiliateUrl(
     return null;
   } catch (error: any) {
     const status = error.response?.status;
-    const body   = error.response?.data;
-    console.error(`❌ [Cuelinks V3] Failed (${status}) for ${productUrl}: ${JSON.stringify(body) || error.message}`);
-    return null;
-  }
-}
-
-/**
- * Check if Cuelinks is configured and available.
- */
-export function isCuelinksConfigured(): boolean {
-  return !!process.env.CUELINKS_API_KEY;
-}
-
-
-/**
- * Convert any product URL into a Cuelinks affiliate tracking link.
- * Works for Flipkart, Myntra, Ajio, Nykaa, Meesho, and 1000+ stores.
- * 
- * @param productUrl - The original product URL
- * @param subId - Optional tracking sub-ID (e.g., 'hostel' or 'main')
- * @returns Affiliate link or null if Cuelinks is not configured
- */
-export async function getCuelinkAffiliateUrl(
-  productUrl: string, 
-  subId?: string
-): Promise<string | null> {
-  const apiKey = process.env.CUELINKS_API_KEY;
-  
-  if (!apiKey) {
-    // Cuelinks not configured — return null (caller will use original URL)
-    return null;
-  }
-
-  try {
-    const response = await axios.post(
-      CUELINKS_API_URL,
-      {
-        url: productUrl,
-        shorten: true,
-        ...(subId ? { subid: subId } : {}),
-      },
-      {
-        headers: {
-          'token': apiKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: 5000,
-      }
-    );
-
-    if (response.data && response.data.shortUrl) {
-      console.log(`🔗 [Cuelinks] Generated affiliate link: ${response.data.shortUrl}`);
-      return response.data.shortUrl;
-    }
-
-    // Some responses use different field names
-    if (response.data && response.data.short_url) {
-      return response.data.short_url;
-    }
-
-    if (response.data && response.data.link) {
-      return response.data.link;
-    }
-
-    console.log(`⚠️ [Cuelinks] No link in response:`, JSON.stringify(response.data));
-    return null;
-  } catch (error: any) {
-    console.error(`❌ [Cuelinks] Failed for ${productUrl}: ${error.message}`);
+    const errBody = error.response?.data;
+    console.error(`❌ [Cuelinks V3] Failed (${status}) for ${productUrl}: ${JSON.stringify(errBody) || error.message}`);
     return null;
   }
 }
