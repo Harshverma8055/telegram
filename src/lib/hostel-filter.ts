@@ -202,6 +202,20 @@ const PENALTY_KEYWORDS: { keywords: string[]; penalty: number }[] = [
       'walking stick', 'wheelchair', 'orthopedic', 'knee brace'
     ]
   },
+  {
+    // Sports Equipment (bulky/specific gear) — not hostel room friendly
+    // Safe change: per file guidelines, adding keywords is allowed
+    penalty: -35,
+    keywords: [
+      'cricket ball', 'cricket kit', 'cricket bat', 'leather ball',
+      'tennis ball', 'rubber ball', 'hockey stick', 'football kit',
+      'basketball', 'volleyball', 'shuttle cock', 'badminton net',
+      'cricket helmet', 'cricket pad', 'stumps', 'cricket stump',
+      'cricket set', 'sports kit', 'football boot', 'golf',
+      'archery', 'boxing gloves', 'punching bag', 'treadmill',
+      'exercise cycle', 'elliptical', 'rowing machine'
+    ]
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────
