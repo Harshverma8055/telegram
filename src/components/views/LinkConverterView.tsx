@@ -28,15 +28,32 @@ interface HistoryItem extends Result {
   convertedAt: string;
 }
 
+// Platforms with no API — open their link generator manually
+const HIGH_COMMISSION = [
+  { name: 'EarnKaro', url: 'https://ekaro.in', commission: '~9%', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', emoji: '💰' },
+  { name: 'ExtraPe',  url: 'https://extrape.com', commission: '~9%', color: '#10b981', bg: 'rgba(16,185,129,0.1)', emoji: '💎' },
+];
+
 export default function LinkConverterView() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedPlatform, setCopiedPlatform] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Copy URL + open platform (for EarnKaro/ExtraPe manual flow)
+  const handleOpenHighCommission = async (platformUrl: string, platformName: string) => {
+    const productUrl = result?.originalUrl || url.trim();
+    if (!productUrl) return;
+    try { await navigator.clipboard.writeText(productUrl); } catch {}
+    setCopiedPlatform(platformName);
+    setTimeout(() => setCopiedPlatform(null), 3000);
+    window.open(platformUrl, '_blank');
+  };
 
   const handleConvert = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -293,6 +310,32 @@ export default function LinkConverterView() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* High Commission Options — always visible when URL is present */}
+        {(url.trim() || result) && (
+          <div style={{ marginTop: 16, padding: '16px 20px', borderRadius: 14, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            <p style={{ fontSize: 12, color: '#f59e0b', fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              💰 Higher Commission Options (No API — Manual Step Required)
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {HIGH_COMMISSION.map(p => (
+                <button key={p.name} onClick={() => handleOpenHighCommission(p.url, p.name)}
+                  style={{ padding: '12px 16px', borderRadius: 10, border: `1px solid ${p.color}40`, background: p.bg, cursor: 'pointer', textAlign: 'left' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: p.color }}>{p.emoji} {p.name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: p.color, background: `${p.color}20`, padding: '2px 8px', borderRadius: 6 }}>{p.commission}</span>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+                    {copiedPlatform === p.name ? '✅ URL copied! Paste in their link generator' : '↗ Opens site + auto-copies URL to clipboard'}
+                  </p>
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>
+              How: Click → site opens → paste URL in their link generator → get 9% commission link
+            </p>
           </div>
         )}
       </div>
