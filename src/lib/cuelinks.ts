@@ -52,19 +52,22 @@ export async function getCuelinkAffiliateUrl(
       }
     );
 
-    const data = response.data;
+    const raw  = response.data;
+    // V3 API wraps response in { data: { tracking_url, affiliate_url, ... } }
+    const data = raw?.data ?? raw;
 
-    // V3 response fields (handle different shapes)
+    // V3 response fields
     if (data?.tracking_url) {
       console.log(`🔗 [Cuelinks V3] Generated: ${data.tracking_url}`);
       return data.tracking_url;
     }
-    if (data?.short_url)  return data.short_url;
-    if (data?.shortUrl)   return data.shortUrl;
-    if (data?.link)       return data.link;
-    if (data?.url)        return data.url;
+    if (data?.affiliate_url) return data.affiliate_url;
+    if (data?.short_url)     return data.short_url;
+    if (data?.shortUrl)      return data.shortUrl;
+    if (data?.link)          return data.link;
+    if (data?.url)           return data.url;
 
-    console.warn('[Cuelinks V3] Unexpected response shape:', JSON.stringify(data).substring(0, 200));
+    console.warn('[Cuelinks V3] Unexpected response shape:', JSON.stringify(raw).substring(0, 200));
     return null;
   } catch (error: any) {
     const status = error.response?.status;
