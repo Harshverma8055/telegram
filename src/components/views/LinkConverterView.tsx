@@ -30,8 +30,8 @@ interface HistoryItem extends Result {
 
 // Platforms with no API — open their link generator manually
 const HIGH_COMMISSION = [
-  { name: 'EarnKaro', url: 'https://ekaro.in', commission: '~9%', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', emoji: '💰' },
-  { name: 'ExtraPe',  url: 'https://extrape.com', commission: '~9%', color: '#10b981', bg: 'rgba(16,185,129,0.1)', emoji: '💎' },
+  { name: 'EarnKaro', url: 'https://earnkaro.com/link-generator', commission: '~9%', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', emoji: '💰' },
+  { name: 'ExtraPe',  url: 'https://www.extrape.com/converter', commission: '~11%', color: '#10b981', bg: 'rgba(16,185,129,0.1)', emoji: '💎' },
 ];
 
 export default function LinkConverterView() {
